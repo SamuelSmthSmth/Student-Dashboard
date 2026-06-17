@@ -35,7 +35,7 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 
-const STATUSES = ["All", "Queued", "Applied", "Interviewing", "Offers", "Rejected"];
+const STATUSES = ["All", "Queued", "Applied", "Interviewing", "Accepted", "Rejected"];
 
 export default function InternshipsPage() {
   const [jobs, setJobs] = useState<any[]>([]);
@@ -51,7 +51,9 @@ export default function InternshipsPage() {
     company: "",
     program: "",
     status: "Queued",
-    closingDate: ""
+    closingDate: "",
+    startDate: "",
+    length: ""
   });
 
   // Load from API on mount
@@ -127,6 +129,8 @@ export default function InternshipsPage() {
       program: newJob.program,
       status: newJob.status,
       closingDate: newJob.closingDate,
+      startDate: newJob.startDate,
+      length: newJob.length,
       stage: "",
       notes: "",
       link: ""
@@ -144,7 +148,7 @@ export default function InternshipsPage() {
       if (!res.ok) throw new Error('Create failed');
       
       setIsCreateOpen(false);
-      setNewJob({ company: "", program: "", status: "Queued", closingDate: "" });
+      setNewJob({ company: "", program: "", status: "Queued", closingDate: "", startDate: "", length: "" });
     } catch (err) {
       console.error(err);
       alert("Failed to create new application.");
@@ -171,7 +175,7 @@ export default function InternshipsPage() {
   return (
     <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
       {/* SIDEBAR */}
-      <aside className="w-[260px] flex flex-col bg-background border-r border-border z-10 shrink-0">
+      <aside className="w-[320px] flex flex-col bg-background border-r border-border z-10 shrink-0">
         <div className="h-32 relative border-b border-border flex flex-col items-start justify-center p-6 overflow-hidden">
           <div className="absolute right-4 top-4 w-2 h-2 bg-primary rounded-full"></div>
           <div className="font-semibold tracking-wide">Student Dashboard</div>
@@ -181,23 +185,11 @@ export default function InternshipsPage() {
           <Link href="/">
             <NavItem icon={<BookOpen size={18} />} label="Syllabus Map (IA ↔ Y2)" />
           </Link>
-          <NavItem icon={<FolderOpen size={18} />} label="Problem Repository" />
-          <NavItem icon={<Code size={18} />} label="Julia/Python Lab" />
           <Link href="/internships">
             <NavItem icon={<Briefcase size={18} />} label="Internship & Job Hub" active />
           </Link>
         </nav>
-        <div className="p-4 space-y-4 border-t border-border">
-          <div className="bg-background border border-border rounded-xl p-4 text-center">
-            <p className="text-xs text-muted-foreground font-medium tracking-wide">Current Lock-In Streak</p>
-            <p className="text-2xl font-bold text-foreground mt-1">12 days</p>
-          </div>
-          <div className="bg-background border border-border rounded-xl p-4 text-center">
-            <p className="text-xs text-muted-foreground font-medium tracking-wide">Total Proofs Conquered</p>
-            <p className="text-2xl font-bold text-foreground mt-1">57</p>
-          </div>
-        </div>
-      </aside>
+        </aside>
 
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-y-auto">
@@ -264,46 +256,88 @@ export default function InternshipsPage() {
             ) : (
               <Accordion className="w-full space-y-3">
                 {filteredJobs.map(job => (
-                  <AccordionItem key={job.id} value={job.id} className="border border-border rounded-lg bg-background px-4">
-                    <AccordionTrigger className="hover:no-underline py-4">
-                      <div className="flex flex-1 items-center justify-between pr-4">
-                        <div className="flex items-center gap-6 w-1/3">
-                          <div className="flex items-center gap-2">
-                            <Building2 size={16} className="text-muted-foreground" />
-                            <span className="font-semibold text-sm">{job.company}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <GraduationCap size={14} />
-                            <span className="truncate">{job.program}</span>
-                          </div>
-                        </div>
+                  
+                  <AccordionItem key={job.id} value={job.id} className="border border-border rounded-lg bg-background relative overflow-hidden group">
+                    {/* Progress bar background indicator */}
+                    <div className="absolute bottom-0 left-0 h-1 bg-secondary w-full" />
+                    <div 
+                      className={`absolute bottom-0 left-0 h-1 transition-all duration-500 ${
+                        job.status === 'Rejected' ? 'bg-red-500/80' : 
+                        job.status === 'Accepted' ? 'bg-emerald-500/80' : 
+                        'bg-blue-500/80'
+                      }`} 
+                      style={{ 
+                        width: job.status === 'Queued' ? '10%' : 
+                               job.status === 'Applied' ? '40%' : 
+                               job.status === 'Interviewing' ? '70%' : 
+                               (job.status === 'Accepted' || job.status === 'Rejected') ? '100%' : '0%' 
+                      }} 
+                    />
 
-                        <div className="flex items-center justify-center w-1/3">
-                          <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground bg-secondary/50 border-border px-2 py-0.5">
-                            {job.stage}
-                          </Badge>
-                        </div>
+                    {/* Absolute dropdown that sits on top of trigger */}
+                    <div className="absolute right-5 top-5 z-10" onClick={(e) => e.stopPropagation()}>
+                      <Select 
+                        value={job.status} 
+                        onValueChange={(val) => handleUpdateJob(job.id, "status", val)}
+                      >
+                        <SelectTrigger className="w-[140px] h-9 bg-slate-900 border-slate-700 text-sm focus:ring-0 text-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Queued">Queued</SelectItem>
+                          <SelectItem value="Applied">Applied</SelectItem>
+                          <SelectItem value="Interviewing">Interviewing</SelectItem>
+                          <SelectItem value="Accepted">Accepted</SelectItem>
+                          <SelectItem value="Rejected">Rejected</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                        <div className="flex items-center justify-end gap-6 w-1/3 text-sm text-muted-foreground">
-                           <Badge className="bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20">
-                              {job.status}
-                           </Badge>
-                           <div className="flex items-center gap-1.5 w-24 justify-end">
-                             <Calendar size={14} />
-                             <span>{job.closingDate}</span>
-                           </div>
+                    <AccordionTrigger className="hover:no-underline p-5 flex flex-col w-full min-h-[120px] justify-start items-start pr-[180px]">
+                      <div className="flex flex-col items-start gap-2">
+                        <div className="flex flex-col items-start text-left">
+                          <div className="flex items-start gap-3">
+                            <Building2 size={20} className="text-muted-foreground shrink-0 mt-1" />
+                            <span className="text-2xl font-extrabold leading-tight">{job.company}</span>
+                          </div>
+                          <span className="text-base font-medium text-slate-400 ml-8">{job.program}</span>
+                        </div>
+                        <div className="text-sm text-slate-400 flex flex-col gap-1 mt-2 ml-8 text-left">
+                          <span>📅 Close: {job.closingDate || 'TBD'}</span>
+                          <span>🚀 Starts: {job.startDate || 'N/A'}</span>
+                          <span>⏳ Length: {job.length || 'N/A'}</span>
+                          <span>🗺 Stage: {job.stage || 'None'}</span>
                         </div>
                       </div>
                     </AccordionTrigger>
-                    <AccordionContent className="pt-2 pb-6 border-t border-border mt-2">
+
+                    <AccordionContent className="pt-2 pb-6 px-5 border-t border-border mt-0">
                        <div className="flex flex-col gap-6 pt-4">
-                          <div className="grid grid-cols-2 gap-6">
+
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                              <div className="flex flex-col gap-2">
-                               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pipeline Stage</label>
+                               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Company Name</label>
+                               <Input 
+                                 value={job.company || ""} 
+                                 onChange={(e) => handleUpdateJob(job.id, "company", e.target.value)}
+                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
+                               />
+                             </div>
+                             <div className="flex flex-col gap-2">
+                               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Role Title</label>
+                               <Input 
+                                 value={job.program || ""} 
+                                 onChange={(e) => handleUpdateJob(job.id, "program", e.target.value)}
+                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
+                               />
+                             </div>
+                             <div className="flex flex-col gap-2">
+                               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stage</label>
                                <Input 
                                  value={job.stage || ""} 
                                  onChange={(e) => handleUpdateJob(job.id, "stage", e.target.value)}
-                                 className="bg-background border-border text-sm font-mono focus-visible:ring-1 focus-visible:ring-primary h-9" 
+                                 placeholder="e.g. Phone Screen"
+                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
                                />
                              </div>
                              <div className="flex flex-col gap-2">
@@ -312,7 +346,25 @@ export default function InternshipsPage() {
                                  type="date"
                                  value={job.closingDate || ""} 
                                  onChange={(e) => handleUpdateJob(job.id, "closingDate", e.target.value)}
-                                 className="bg-background border-border text-sm focus-visible:ring-1 focus-visible:ring-primary h-9" 
+                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
+                               />
+                             </div>
+                             <div className="flex flex-col gap-2">
+                               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Start Date</label>
+                               <Input 
+                                 type="date"
+                                 value={job.startDate || ""} 
+                                 onChange={(e) => handleUpdateJob(job.id, "startDate", e.target.value)}
+                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
+                               />
+                             </div>
+                             <div className="flex flex-col gap-2">
+                               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Length</label>
+                               <Input 
+                                 value={job.length || ""} 
+                                 onChange={(e) => handleUpdateJob(job.id, "length", e.target.value)}
+                                 placeholder="e.g. 10 weeks"
+                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
                                />
                              </div>
                           </div>
@@ -326,7 +378,8 @@ export default function InternshipsPage() {
                              <Textarea 
                                value={job.notes || ""}
                                onChange={(e) => handleUpdateJob(job.id, "notes", e.target.value)}
-                               className="min-h-[120px] resize-none bg-background border-border text-sm focus-visible:ring-1 focus-visible:ring-primary"
+                               rows={3}
+                               className="h-20 resize-none bg-[#0D1117] border border-slate-700/50 text-sm focus-visible:ring-1 focus-visible:ring-primary"
                                placeholder="Add interview prep, thoughts, or application links here..."
                              />
                           </div>
@@ -411,7 +464,7 @@ export default function InternshipsPage() {
                     <SelectItem value="Queued">Queued</SelectItem>
                     <SelectItem value="Applied">Applied</SelectItem>
                     <SelectItem value="Interviewing">Interviewing</SelectItem>
-                    <SelectItem value="Offers">Offers</SelectItem>
+                    <SelectItem value="Accepted">Accepted</SelectItem>
                     <SelectItem value="Rejected">Rejected</SelectItem>
                   </SelectContent>
                 </Select>
@@ -422,6 +475,26 @@ export default function InternshipsPage() {
                   type="date"
                   value={newJob.closingDate}
                   onChange={(e) => setNewJob({...newJob, closingDate: e.target.value})}
+                  className="bg-background border-border text-sm focus-visible:ring-1 focus-visible:ring-primary h-9"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold text-muted-foreground uppercase">Start Date</label>
+                <Input 
+                  type="date"
+                  value={newJob.startDate}
+                  onChange={(e) => setNewJob({...newJob, startDate: e.target.value})}
+                  className="bg-background border-border text-sm focus-visible:ring-1 focus-visible:ring-primary h-9"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold text-muted-foreground uppercase">Length</label>
+                <Input 
+                  value={newJob.length}
+                  onChange={(e) => setNewJob({...newJob, length: e.target.value})}
+                  placeholder="e.g. 10 weeks"
                   className="bg-background border-border text-sm focus-visible:ring-1 focus-visible:ring-primary h-9"
                 />
               </div>

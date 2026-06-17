@@ -219,7 +219,7 @@ export default function DashboardTemplate() {
     <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
       
       {/* SIDEBAR */}
-      <aside className="w-[260px] flex flex-col bg-background border-r border-border z-10 shrink-0">
+      <aside className="w-[320px] flex flex-col bg-background border-r border-border z-10 shrink-0">
         <div className="h-32 relative border-b border-border flex flex-col items-start justify-center p-6 overflow-hidden">
           <div className="absolute right-4 top-4 w-2 h-2 bg-primary rounded-full"></div>
           <div className="font-semibold tracking-wide">Student Dashboard</div>
@@ -234,17 +234,6 @@ export default function DashboardTemplate() {
             <NavItem icon={<Briefcase size={18} />} label="Internship & Job Hub" />
           </Link>
         </nav>
-
-        <div className="p-4 space-y-4 border-t border-border">
-          <div className="bg-background border border-border rounded-xl p-4 text-center">
-            <p className="text-xs text-muted-foreground font-medium tracking-wide">Current Lock-In Streak</p>
-            <p className="text-2xl font-bold text-foreground mt-1">12 days</p>
-          </div>
-          <div className="bg-background border border-border rounded-xl p-4 text-center">
-            <p className="text-xs text-muted-foreground font-medium tracking-wide">Total Modules Synced</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{modules.length}</p>
-          </div>
-        </div>
       </aside>
 
       {/* MAIN CONTENT */}
