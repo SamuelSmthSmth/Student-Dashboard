@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
-  BookOpen, Briefcase, Plus, Check, X, Book, MoreVertical, Trash2 
+  BookOpen, Briefcase, Plus, Check, X, Book, MoreVertical, Trash2, Edit2 
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
@@ -39,6 +39,9 @@ export default function DashboardTemplate() {
 
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState("");
 
   const loadData = async () => {
     try {
@@ -111,6 +114,32 @@ export default function DashboardTemplate() {
     await saveConfig(newConfig);
   };
 
+  const handleRenameCategory = async (oldName: string) => {
+    const trimmed = editCategoryName.trim();
+    if (!trimmed || trimmed === oldName || trimmed === 'Uncategorized') {
+      setEditingCategory(null);
+      return;
+    }
+    
+    if (config.categories[trimmed]) {
+      alert("A category with this name already exists.");
+      return;
+    }
+
+    const updatedCategories = { ...config.categories };
+    updatedCategories[trimmed] = updatedCategories[oldName] || [];
+    delete updatedCategories[oldName];
+
+    const newConfig = {
+      ...config,
+      categories: updatedCategories
+    };
+
+    setConfig(newConfig);
+    setEditingCategory(null);
+    await saveConfig(newConfig);
+  };
+
   const handleMoveModule = async (moduleName: string, targetCategory: string) => {
     const updatedCategories = { ...config.categories };
     
@@ -136,8 +165,15 @@ export default function DashboardTemplate() {
     await saveConfig(newConfig);
   };
 
-  // Grouping logic
-  const categoryKeys = Object.keys(config.categories);
+  // Helper to extract code inside brackets/parentheses for sorting
+  const getSortKey = (name: string) => {
+    const match = name.match(/\(([^)]+)\)/);
+    if (match) return match[1].trim().toLowerCase();
+    return name.trim().toLowerCase();
+  };
+
+  // Grouping logic (Categories sorted alphabetically)
+  const categoryKeys = Object.keys(config.categories).sort((a, b) => a.localeCompare(b));
   const grouped: Record<string, ModuleData[]> = {};
   categoryKeys.forEach(cat => {
     grouped[cat] = [];
@@ -156,6 +192,17 @@ export default function DashboardTemplate() {
     if (!found) {
       grouped['Uncategorized'].push(mod);
     }
+  });
+
+  // Sort modules in each category alphabetically based on the bracket code
+  Object.keys(grouped).forEach(cat => {
+    grouped[cat].sort((a, b) => {
+      const codeA = getSortKey(a.name);
+      const codeB = getSortKey(b.name);
+      const comp = codeA.localeCompare(codeB);
+      if (comp !== 0) return comp;
+      return a.name.localeCompare(b.name);
+    });
   });
 
   // Filter which categories to render
@@ -251,15 +298,53 @@ export default function DashboardTemplate() {
                   {/* Category Header */}
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <h2 className="text-lg font-medium text-foreground whitespace-nowrap tracking-wide">{category.name}</h2>
-                      {!category.isDefault && (
-                        <button 
-                          onClick={() => handleDeleteCategory(category.name)}
-                          className="text-muted-foreground hover:text-red-400 p-1 rounded hover:bg-secondary/50 transition-colors cursor-pointer"
-                          title="Delete Category"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                      {editingCategory === category.name ? (
+                        <div className="flex items-center gap-2">
+                          <Input 
+                            value={editCategoryName}
+                            onChange={(e) => setEditCategoryName(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleRenameCategory(category.name)}
+                            className="h-8 w-48 text-sm bg-background border-border"
+                            autoFocus
+                          />
+                          <button 
+                            onClick={() => handleRenameCategory(category.name)}
+                            className="text-green-500 hover:text-green-400 p-1 rounded hover:bg-secondary/50 cursor-pointer"
+                          >
+                            <Check size={16} />
+                          </button>
+                          <button 
+                            onClick={() => setEditingCategory(null)}
+                            className="text-red-500 hover:text-red-400 p-1 rounded hover:bg-secondary/50 cursor-pointer"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <h2 className="text-lg font-medium text-foreground whitespace-nowrap tracking-wide">{category.name}</h2>
+                          {!category.isDefault && (
+                            <div className="flex items-center gap-1">
+                              <button 
+                                onClick={() => {
+                                  setEditingCategory(category.name);
+                                  setEditCategoryName(category.name);
+                                }}
+                                className="text-muted-foreground hover:text-blue-400 p-1 rounded hover:bg-secondary/50 transition-colors cursor-pointer"
+                                title="Rename Category"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteCategory(category.name)}
+                                className="text-muted-foreground hover:text-red-400 p-1 rounded hover:bg-secondary/50 transition-colors cursor-pointer"
+                                title="Delete Category"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="h-px flex-1 bg-border/80 ml-4"></div>
