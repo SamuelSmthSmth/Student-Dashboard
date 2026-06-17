@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import 'katex/dist/katex.min.css';
@@ -12,6 +12,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Student Dashboard",
   description: "A local-first, zero-backend Academic & Personal Dashboard",
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0D1117',
 };
 
 export default function RootLayout({
