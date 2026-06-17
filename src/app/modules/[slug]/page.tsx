@@ -10,6 +10,7 @@ import rehypeKatex from 'rehype-katex';
 import { getVaultHandle, readTextFile, writeTextFile, deleteFile, getPdfUrl, scanModules, getVaultCategories, ModuleData } from '@/lib/fs-helper';
 import { CodexExportButton } from '@/components/CodexExport';
 import { Button } from '@/components/ui/button';
+import { PdfViewer } from '@/components/pdf-viewer';
 
 interface VaultCategory {
   name: string;
@@ -564,13 +565,9 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
         )}
 
         {/* Viewer Content */}
-        <div className="flex-1 overflow-hidden relative">
+        <div className="flex-1 overflow-hidden relative bg-[#11151E]">
           {activeFileUrl ? (
-            <iframe 
-              src={activeFileUrl} 
-              className="w-full h-full border-none bg-white" 
-              title={activeFileName || 'Document Viewer'} 
-            />
+            <PdfViewer url={activeFileUrl} />
           ) : (
             <div className="flex-1 h-full flex items-center justify-center flex-col text-muted-foreground/80">
               <FileText size={64} className="mb-6 opacity-20" />
