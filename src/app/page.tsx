@@ -195,11 +195,8 @@ function ModuleCard({ moduleData }: { moduleData: ModuleData }) {
     (moduleData.resources.pastPapers?.length || 0) +
     (moduleData.resources.textbooks?.length || 0);
     
-  // Simple slugification for routing
-  const slug = moduleData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
   return (
-    <Link href={`/modules/${slug}`} className="block h-full">
+    <Link href={`/modules/${encodeURIComponent(moduleData.name)}`} className="block h-full">
       <div className="bg-[#161B26] border border-slate-800/60 rounded-xl p-4 flex items-center justify-between transition-all duration-200 cursor-pointer hover:border-blue-500/40 hover:shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)] hover:bg-[#1c2331] h-full">
         <div className="flex items-center gap-3">
           <Book size={18} className="text-muted-foreground" />
