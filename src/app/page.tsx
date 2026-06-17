@@ -395,13 +395,13 @@ function ModuleCard({ moduleData, categoriesList, currentCategory, onMove }: Mod
   return (
     <div className="relative group">
       <Link href={`/modules/${encodeURIComponent(moduleData.name)}`} className="block h-full">
-        <div className="bg-[#161B26] border border-slate-800/60 rounded-xl p-4 flex items-center justify-between transition-all duration-200 cursor-pointer hover:border-blue-500/40 hover:shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)] hover:bg-[#1c2331] h-full pr-12">
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between transition-all duration-200 cursor-pointer hover:border-primary/45 hover:shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)] hover:bg-accent h-full pr-12">
           <div className="flex items-center gap-3 min-w-0">
             <Book size={18} className="text-muted-foreground shrink-0" />
-            <span className="text-base font-medium text-white truncate">{moduleData.name}</span>
+            <span className="text-base font-medium text-foreground truncate">{moduleData.name}</span>
           </div>
           {totalFiles > 0 && (
-            <span className="text-xs bg-slate-800 text-slate-400 px-2 py-1 rounded-md shrink-0 ml-2">
+            <span className="text-xs bg-secondary text-secondary-foreground border border-border/50 px-2 py-1 rounded-md shrink-0 ml-2">
               {totalFiles} file{totalFiles === 1 ? '' : 's'}
             </span>
           )}
@@ -416,14 +416,14 @@ function ModuleCard({ moduleData, categoriesList, currentCategory, onMove }: Mod
               e.stopPropagation();
               e.preventDefault();
             }}
-            className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary transition-colors cursor-pointer"
             title="Move Category"
           >
             <MoreVertical size={16} />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 bg-[#161B26] border border-slate-800 text-slate-200">
+          <DropdownMenuContent align="end" className="w-56 bg-popover border border-border text-popover-foreground">
             <DropdownMenuLabel>Move to...</DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-slate-800" />
+            <DropdownMenuSeparator className="bg-border" />
             {categoriesList
               .filter(cat => cat !== currentCategory)
               .map(cat => (
@@ -434,7 +434,7 @@ function ModuleCard({ moduleData, categoriesList, currentCategory, onMove }: Mod
                     e.preventDefault();
                     onMove(moduleData.name, cat);
                   }}
-                  className="hover:bg-[#1c2331] focus:bg-[#1c2331] focus:text-white cursor-pointer"
+                  className="hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground cursor-pointer"
                 >
                   {cat}
                 </DropdownMenuItem>

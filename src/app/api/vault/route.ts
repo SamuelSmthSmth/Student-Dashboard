@@ -105,3 +105,20 @@ export async function DELETE(request: Request) {
     return new NextResponse('Internal server error', { status: 500 });
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const { moduleName, oldCategoryName, newCategoryName } = body;
+    if (!moduleName || !oldCategoryName || !newCategoryName) return new NextResponse('Missing args', { status: 400 });
+
+    const oldPath = path.join(os.homedir(), 'Documents', 'Obsidian', 'Academics', 'Modules', moduleName, `${oldCategoryName}.md`);
+    const newPath = path.join(os.homedir(), 'Documents', 'Obsidian', 'Academics', 'Modules', moduleName, `${newCategoryName}.md`);
+    
+    await fs.promises.rename(oldPath, newPath);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Vault PATCH error:', error);
+    return new NextResponse('Internal server error', { status: 500 });
+  }
+}

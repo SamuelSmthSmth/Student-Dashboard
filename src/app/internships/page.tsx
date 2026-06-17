@@ -280,7 +280,7 @@ export default function InternshipsPage() {
                         value={job.status} 
                         onValueChange={(val) => handleUpdateJob(job.id, "status", val)}
                       >
-                        <SelectTrigger className="w-[140px] h-9 bg-slate-900 border-slate-700 text-sm focus:ring-0 text-slate-200">
+                        <SelectTrigger className="w-[140px] h-9 bg-background border-border text-sm focus:ring-1 focus:ring-ring text-foreground hover:bg-secondary/80">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -300,9 +300,9 @@ export default function InternshipsPage() {
                             <Building2 size={20} className="text-muted-foreground shrink-0 mt-1" />
                             <span className="text-2xl font-extrabold leading-tight">{job.company}</span>
                           </div>
-                          <span className="text-base font-medium text-slate-400 ml-8">{job.program}</span>
+                          <span className="text-base font-medium text-muted-foreground ml-8">{job.program}</span>
                         </div>
-                        <div className="text-sm text-slate-400 flex flex-col gap-1 mt-2 ml-8 text-left">
+                        <div className="text-sm text-muted-foreground flex flex-col gap-1 mt-2 ml-8 text-left">
                           <span>📅 Close: {job.closingDate || 'TBD'}</span>
                           <span>🚀 Starts: {job.startDate || 'N/A'}</span>
                           <span>⏳ Length: {job.length || 'N/A'}</span>
@@ -320,7 +320,7 @@ export default function InternshipsPage() {
                                <Input 
                                  value={job.company || ""} 
                                  onChange={(e) => handleUpdateJob(job.id, "company", e.target.value)}
-                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
+                                 className="bg-background border border-border rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-ring h-9 text-foreground w-full" 
                                />
                              </div>
                              <div className="flex flex-col gap-2">
@@ -328,7 +328,7 @@ export default function InternshipsPage() {
                                <Input 
                                  value={job.program || ""} 
                                  onChange={(e) => handleUpdateJob(job.id, "program", e.target.value)}
-                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
+                                 className="bg-background border border-border rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-ring h-9 text-foreground w-full" 
                                />
                              </div>
                              <div className="flex flex-col gap-2">
@@ -337,7 +337,7 @@ export default function InternshipsPage() {
                                  value={job.stage || ""} 
                                  onChange={(e) => handleUpdateJob(job.id, "stage", e.target.value)}
                                  placeholder="e.g. Phone Screen"
-                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
+                                 className="bg-background border border-border rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-ring h-9 text-foreground w-full" 
                                />
                              </div>
                              <div className="flex flex-col gap-2">
@@ -346,7 +346,7 @@ export default function InternshipsPage() {
                                  type="date"
                                  value={job.closingDate || ""} 
                                  onChange={(e) => handleUpdateJob(job.id, "closingDate", e.target.value)}
-                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
+                                 className="bg-background border border-border rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-ring h-9 text-foreground w-full" 
                                />
                              </div>
                              <div className="flex flex-col gap-2">
@@ -355,7 +355,7 @@ export default function InternshipsPage() {
                                  type="date"
                                  value={job.startDate || ""} 
                                  onChange={(e) => handleUpdateJob(job.id, "startDate", e.target.value)}
-                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
+                                 className="bg-background border border-border rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-ring h-9 text-foreground w-full" 
                                />
                              </div>
                              <div className="flex flex-col gap-2">
@@ -364,7 +364,7 @@ export default function InternshipsPage() {
                                  value={job.length || ""} 
                                  onChange={(e) => handleUpdateJob(job.id, "length", e.target.value)}
                                  placeholder="e.g. 10 weeks"
-                                 className="bg-[#0D1117] border border-slate-700/50 rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-primary h-9 text-slate-200 w-full" 
+                                 className="bg-background border border-border rounded-md px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-ring h-9 text-foreground w-full" 
                                />
                              </div>
                           </div>
@@ -379,7 +379,7 @@ export default function InternshipsPage() {
                                value={job.notes || ""}
                                onChange={(e) => handleUpdateJob(job.id, "notes", e.target.value)}
                                rows={3}
-                               className="h-20 resize-none bg-[#0D1117] border border-slate-700/50 text-sm focus-visible:ring-1 focus-visible:ring-primary"
+                               className="h-20 resize-none bg-background border border-border text-foreground text-sm focus-visible:ring-1 focus-visible:ring-ring"
                                placeholder="Add interview prep, thoughts, or application links here..."
                              />
                           </div>
