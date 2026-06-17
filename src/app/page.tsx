@@ -3,11 +3,19 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
-  BookOpen, FolderOpen, Code, Briefcase, Plus, GripVertical, ChevronRight, Check, X, Book 
+  BookOpen, Briefcase, Plus, Check, X, Book, MoreVertical, Trash2 
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 interface ModuleData {
   name: string;
@@ -19,55 +27,146 @@ interface ModuleData {
   };
 }
 
-interface Category {
-  id: string;
-  name: string;
+interface DashboardConfig {
+  categories: Record<string, string[]>;
+  defaultCategory: string;
 }
 
 export default function DashboardTemplate() {
   const [modules, setModules] = useState<ModuleData[]>([]);
+  const [config, setConfig] = useState<DashboardConfig>({ categories: {}, defaultCategory: 'Uncategorized' });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Mock Categories State
-  const [categories, setCategories] = useState<Category[]>([
-    { id: '1', name: 'Cambridge Year 1' },
-    { id: '2', name: 'Exeter Year 2' },
-  ]);
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
 
-  useEffect(() => {
-    async function fetchModules() {
-      try {
-        const res = await fetch('/api/modules');
-        const json = await res.json();
-        setModules(json.data || []);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
+  const loadData = async () => {
+    try {
+      const [modulesRes, configRes] = await Promise.all([
+        fetch('/api/modules'),
+        fetch('/api/dashboard')
+      ]);
+      if (modulesRes.ok && configRes.ok) {
+        const modulesJson = await modulesRes.json();
+        const configJson = await configRes.json();
+        setModules(modulesJson.data || []);
+        setConfig(configJson);
       }
+    } catch (err) {
+      console.error("Failed to load dashboard data", err);
+    } finally {
+      setIsLoading(false);
     }
-    fetchModules();
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
-  const handleCreateCategory = () => {
-    if (!newCategoryName.trim()) {
+  const saveConfig = async (newConfig: DashboardConfig) => {
+    try {
+      await fetch('/api/dashboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newConfig)
+      });
+    } catch (e) {
+      console.error("Failed to save config", e);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    const trimmed = newCategoryName.trim();
+    if (!trimmed || trimmed === 'Uncategorized') {
       setIsCreatingCategory(false);
       return;
     }
-    setCategories([...categories, { id: Date.now().toString(), name: newCategoryName }]);
+    
+    const newConfig = {
+      ...config,
+      categories: {
+        ...config.categories,
+        [trimmed]: []
+      }
+    };
+    
+    setConfig(newConfig);
     setNewCategoryName("");
     setIsCreatingCategory(false);
+    await saveConfig(newConfig);
   };
 
-  // Mock Clustering Logic for visual representation
-  // We arbitrarily split fetched modules into the first two categories.
-  const getModulesForCategory = (catId: string) => {
-    if (catId === '1') return modules.filter((_, i) => i % 2 === 0);
-    if (catId === '2') return modules.filter((_, i) => i % 2 !== 0);
-    return []; // newly created categories are empty for now
+  const handleDeleteCategory = async (catName: string) => {
+    if (!confirm(`Delete category "${catName}"? Modules inside will be moved to Uncategorized.`)) return;
+    
+    const updatedCategories = { ...config.categories };
+    delete updatedCategories[catName];
+    
+    const newConfig = {
+      ...config,
+      categories: updatedCategories
+    };
+    
+    setConfig(newConfig);
+    await saveConfig(newConfig);
   };
+
+  const handleMoveModule = async (moduleName: string, targetCategory: string) => {
+    const updatedCategories = { ...config.categories };
+    
+    // Remove module name from any category it's currently listed under
+    Object.keys(updatedCategories).forEach(cat => {
+      updatedCategories[cat] = updatedCategories[cat].filter(m => m !== moduleName);
+    });
+    
+    // Add to target category if it's not the fallback "Uncategorized"
+    if (targetCategory !== 'Uncategorized') {
+      if (!updatedCategories[targetCategory]) {
+        updatedCategories[targetCategory] = [];
+      }
+      updatedCategories[targetCategory].push(moduleName);
+    }
+    
+    const newConfig = {
+      ...config,
+      categories: updatedCategories
+    };
+    
+    setConfig(newConfig);
+    await saveConfig(newConfig);
+  };
+
+  // Grouping logic
+  const categoryKeys = Object.keys(config.categories);
+  const grouped: Record<string, ModuleData[]> = {};
+  categoryKeys.forEach(cat => {
+    grouped[cat] = [];
+  });
+  grouped['Uncategorized'] = [];
+
+  modules.forEach(mod => {
+    let found = false;
+    for (const cat of categoryKeys) {
+      if (config.categories[cat]?.includes(mod.name)) {
+        grouped[cat].push(mod);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      grouped['Uncategorized'].push(mod);
+    }
+  });
+
+  // Filter which categories to render
+  const categoriesToRender = [
+    ...categoryKeys.map(name => ({ name, isDefault: false })),
+  ];
+  if (grouped['Uncategorized'].length > 0) {
+    categoriesToRender.push({ name: 'Uncategorized', isDefault: true });
+  }
+
+  const allCategoriesList = [...categoryKeys, 'Uncategorized'];
 
   return (
     <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
@@ -84,8 +183,6 @@ export default function DashboardTemplate() {
           <Link href="/">
             <NavItem icon={<BookOpen size={18} />} label="Syllabus Map (IA ↔ Y2)" active />
           </Link>
-          <NavItem icon={<FolderOpen size={18} />} label="Problem Repository" />
-          <NavItem icon={<Code size={18} />} label="Julia/Python Lab" />
           <Link href="/internships">
             <NavItem icon={<Briefcase size={18} />} label="Internship & Job Hub" />
           </Link>
@@ -143,25 +240,44 @@ export default function DashboardTemplate() {
         <section className="p-8 flex-1 flex flex-col gap-10">
           {isLoading ? (
             <div className="text-sm text-muted-foreground animate-pulse">Scanning local disk for modules...</div>
+          ) : categoriesToRender.length === 0 ? (
+            <div className="text-sm text-muted-foreground italic">No modules found. Ensure your Obsidian vault matches the scanned structure.</div>
           ) : (
-            categories.map(category => {
-              const catModules = getModulesForCategory(category.id);
+            categoriesToRender.map(category => {
+              const catModules = grouped[category.name] || [];
               
               return (
-                <div key={category.id} className="w-full flex flex-col">
+                <div key={category.name} className="w-full flex flex-col">
                   {/* Category Header */}
-                  <div className="flex items-center gap-4 mb-4">
-                    <h2 className="text-lg font-medium text-foreground whitespace-nowrap tracking-wide">{category.name}</h2>
-                    <div className="h-px w-full bg-border/80"></div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-lg font-medium text-foreground whitespace-nowrap tracking-wide">{category.name}</h2>
+                      {!category.isDefault && (
+                        <button 
+                          onClick={() => handleDeleteCategory(category.name)}
+                          className="text-muted-foreground hover:text-red-400 p-1 rounded hover:bg-secondary/50 transition-colors cursor-pointer"
+                          title="Delete Category"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="h-px flex-1 bg-border/80 ml-4"></div>
                   </div>
                   
                   {/* Module Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                     {catModules.length === 0 ? (
-                      <div className="text-xs text-muted-foreground py-2 italic opacity-60">No modules in this category.</div>
+                      <div className="text-xs text-muted-foreground py-2 italic opacity-60 col-span-full">No modules in this category.</div>
                     ) : (
                       catModules.map((mod, idx) => (
-                        <ModuleCard key={idx} moduleData={mod} />
+                        <ModuleCard 
+                          key={idx} 
+                          moduleData={mod} 
+                          categoriesList={allCategoriesList} 
+                          currentCategory={category.name} 
+                          onMove={handleMoveModule} 
+                        />
                       ))
                     )}
                   </div>
@@ -187,7 +303,14 @@ function NavItem({ icon, label, active = false }: { icon: React.ReactNode, label
   );
 }
 
-function ModuleCard({ moduleData }: { moduleData: ModuleData }) {
+interface ModuleCardProps {
+  moduleData: ModuleData;
+  categoriesList: string[];
+  currentCategory: string;
+  onMove: (moduleName: string, targetCategory: string) => void;
+}
+
+function ModuleCard({ moduleData, categoriesList, currentCategory, onMove }: ModuleCardProps) {
   // Aggregate total files across all directories for this module
   const totalFiles = 
     (moduleData.resources.lectureNotes?.length || 0) +
@@ -196,18 +319,55 @@ function ModuleCard({ moduleData }: { moduleData: ModuleData }) {
     (moduleData.resources.textbooks?.length || 0);
     
   return (
-    <Link href={`/modules/${encodeURIComponent(moduleData.name)}`} className="block h-full">
-      <div className="bg-[#161B26] border border-slate-800/60 rounded-xl p-4 flex items-center justify-between transition-all duration-200 cursor-pointer hover:border-blue-500/40 hover:shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)] hover:bg-[#1c2331] h-full">
-        <div className="flex items-center gap-3">
-          <Book size={18} className="text-muted-foreground" />
-          <span className="text-base font-medium text-white">{moduleData.name}</span>
+    <div className="relative group">
+      <Link href={`/modules/${encodeURIComponent(moduleData.name)}`} className="block h-full">
+        <div className="bg-[#161B26] border border-slate-800/60 rounded-xl p-4 flex items-center justify-between transition-all duration-200 cursor-pointer hover:border-blue-500/40 hover:shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)] hover:bg-[#1c2331] h-full pr-12">
+          <div className="flex items-center gap-3 min-w-0">
+            <Book size={18} className="text-muted-foreground shrink-0" />
+            <span className="text-base font-medium text-white truncate">{moduleData.name}</span>
+          </div>
+          {totalFiles > 0 && (
+            <span className="text-xs bg-slate-800 text-slate-400 px-2 py-1 rounded-md shrink-0 ml-2">
+              {totalFiles} file{totalFiles === 1 ? '' : 's'}
+            </span>
+          )}
         </div>
-        {totalFiles > 0 && (
-          <span className="text-xs bg-slate-800 text-slate-400 px-2 py-1 rounded-md shrink-0 ml-2">
-            {totalFiles} file{totalFiles === 1 ? '' : 's'}
-          </span>
-        )}
+      </Link>
+
+      {/* Move Module Menu Button */}
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 z-10">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+            className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Move Category"
+          >
+            <MoreVertical size={16} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 bg-[#161B26] border border-slate-800 text-slate-200">
+            <DropdownMenuLabel>Move to...</DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-slate-800" />
+            {categoriesList
+              .filter(cat => cat !== currentCategory)
+              .map(cat => (
+                <DropdownMenuItem 
+                  key={cat}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onMove(moduleData.name, cat);
+                  }}
+                  className="hover:bg-[#1c2331] focus:bg-[#1c2331] focus:text-white cursor-pointer"
+                >
+                  {cat}
+                </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-    </Link>
+    </div>
   );
 }
