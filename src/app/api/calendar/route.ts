@@ -4,10 +4,11 @@ import ical from 'node-ical';
 const EXETER_URL = "https://mytimetable.exeter.ac.uk/ical?6a32f0a1&group=false&eu=c280NzQ=&h=MKUu-eaUcbW-QfqVwKHubxzwtfMwo1ZgbnILGGVjdZg=";
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 export async function GET() {
   try {
-    const response = await fetch(EXETER_URL);
+    const response = await fetch(EXETER_URL, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`Failed to fetch calendar: ${response.statusText}`);
     }

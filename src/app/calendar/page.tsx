@@ -2,20 +2,22 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { getVaultHandle, readJsonFile } from '@/lib/fs-helper';
 import { 
-  BookOpen, Briefcase, Calendar as CalendarIcon, Save, Loader2 
+  BookOpen, Briefcase, Calendar as CalendarIcon, Save, Loader2, Rocket, AlertCircle 
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { CalendarWidget } from '@/components/calendar-widget';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-interface CalendarEvent {
+interface UnifiedEvent {
   id: string;
   title: string;
-  start: string;
-  end: string;
-  location: string;
+  date: Date;
+  type: 'lecture' | 'deadline' | 'start';
+  meta?: string;
+  end?: Date; // Only for lectures
 }
 
 const NavItem = ({ icon, label, active = false }: { icon: React.ReactNode, label: string, active?: boolean }) => {
@@ -30,7 +32,7 @@ const NavItem = ({ icon, label, active = false }: { icon: React.ReactNode, label
 export default function CalendarPage() {
   const [url, setUrl] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [events, setEvents] = useState<UnifiedEvent[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
 
   // Fetch dashboard config to prefill URL
@@ -53,11 +55,57 @@ export default function CalendarPage() {
   const loadEvents = async () => {
     setIsLoadingEvents(true);
     try {
+      const unified: UnifiedEvent[] = [];
+
+      // 1. Fetch Calendar Lectures
       const res = await fetch('/api/calendar');
       if (res.ok) {
         const data = await res.json();
-        setEvents(data);
+        data.forEach((e: any) => {
+          unified.push({
+            id: `cal-${e.id}`,
+            title: e.title,
+            date: new Date(e.start),
+            type: 'lecture',
+            meta: e.location,
+            end: new Date(e.end)
+          });
+        });
       }
+
+      // 2. Fetch Internships
+      const handle = await getVaultHandle(false);
+      if (handle) {
+        const jobsData = await readJsonFile(handle, 'internships.json', []);
+        jobsData.forEach((job: any) => {
+          if (job.closingDate) {
+            const d = new Date(job.closingDate);
+            if (!isNaN(d.getTime())) {
+              unified.push({
+                id: `deadline-${job.id}`,
+                title: `Deadline: ${job.program}`,
+                date: d,
+                type: 'deadline',
+                meta: job.company
+              });
+            }
+          }
+          if (job.startDate) {
+            const d = new Date(job.startDate);
+            if (!isNaN(d.getTime())) {
+              unified.push({
+                id: `start-${job.id}`,
+                title: `Starts: ${job.program}`,
+                date: d,
+                type: 'start',
+                meta: job.company
+              });
+            }
+          }
+        });
+      }
+
+      setEvents(unified);
     } catch (err) {}
     setIsLoadingEvents(false);
   };
@@ -91,7 +139,7 @@ export default function CalendarPage() {
 
   // Filter events based on view
   const filteredEvents = events.filter(e => {
-    const d = new Date(e.start);
+    const d = e.date;
     if (view === 'upcoming') {
       return d >= startOfToday;
     } else if (view === 'past') {
@@ -104,8 +152,8 @@ export default function CalendarPage() {
   // - 'upcoming' or 'all': chronological (ascending)
   // - 'past': reverse-chronological (descending) so newest past events are at the top
   const sortedEvents = [...filteredEvents].sort((a, b) => {
-    const timeA = new Date(a.start).getTime();
-    const timeB = new Date(b.start).getTime();
+    const timeA = a.date.getTime();
+    const timeB = b.date.getTime();
     if (view === 'past') {
       return timeB - timeA;
     }
@@ -113,9 +161,9 @@ export default function CalendarPage() {
   });
 
   // Group events by day
-  const groupedEvents: Record<string, CalendarEvent[]> = {};
+  const groupedEvents: Record<string, UnifiedEvent[]> = {};
   sortedEvents.forEach(e => {
-    const d = new Date(e.start);
+    const d = e.date;
     const dateStr = d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
     if (!groupedEvents[dateStr]) groupedEvents[dateStr] = [];
     groupedEvents[dateStr].push(e);
@@ -188,7 +236,7 @@ export default function CalendarPage() {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Upcoming ({events.filter(e => new Date(e.start) >= startOfToday).length})
+                Upcoming ({events.filter(e => e.date >= startOfToday).length})
               </button>
               <button
                 onClick={() => setView('past')}
@@ -198,7 +246,7 @@ export default function CalendarPage() {
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Past ({events.filter(e => new Date(e.start) < startOfToday).length})
+                Past ({events.filter(e => e.date < startOfToday).length})
               </button>
               <button
                 onClick={() => setView('all')}
@@ -244,29 +292,55 @@ export default function CalendarPage() {
                   <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4 border-b border-border/50 pb-2">{dateStr}</h3>
                   <div className="space-y-3">
                     {dayEvents.map(event => {
-                      const startDate = new Date(event.start);
-                      const endDate = new Date(event.end);
-                      const timeStr = `${startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                      const startDate = event.date;
                       const isPast = startDate < startOfToday;
                       
+                      let timeStr = '';
+                      if (event.type === 'lecture' && event.end) {
+                        timeStr = `${startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${event.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                      } else {
+                        // For deadline and start events, just show date or "All Day" or a specific time if parsing allows, but we can just say "Event" or hide time
+                        timeStr = "All Day";
+                      }
+                      
+                      let borderClass = "border-border hover:border-primary/40";
+                      let iconClass = isPast ? 'bg-muted-foreground/45' : 'bg-primary';
+                      let titleClass = isPast ? 'text-muted-foreground' : 'text-foreground';
+                      
+                      if (event.type === 'deadline') {
+                        borderClass = "border-red-500/30 hover:border-red-500/60";
+                        iconClass = "text-red-500";
+                        titleClass = isPast ? 'text-red-500/60' : 'text-red-500';
+                      } else if (event.type === 'start') {
+                        borderClass = "border-emerald-500/30 hover:border-emerald-500/60";
+                        iconClass = "text-emerald-500";
+                        titleClass = isPast ? 'text-emerald-500/60' : 'text-emerald-500';
+                      }
+
                       return (
                         <div 
                           key={event.id} 
-                          className={`bg-card border border-border rounded-lg p-4 flex flex-col md:flex-row md:items-center gap-4 hover:border-primary/40 transition-colors ${
+                          className={`bg-card border rounded-lg p-4 flex flex-col md:flex-row md:items-center gap-4 transition-colors ${borderClass} ${
                             isPast ? 'opacity-65' : ''
                           }`}
                         >
                           <div className="flex items-center gap-3 md:w-48 shrink-0 text-muted-foreground font-mono text-sm">
-                            <div className={`w-2 h-2 rounded-full ${isPast ? 'bg-muted-foreground/45' : 'bg-primary'}`} />
+                            {event.type === 'lecture' ? (
+                              <div className={`w-2 h-2 rounded-full ${iconClass}`} />
+                            ) : event.type === 'deadline' ? (
+                              <AlertCircle size={16} className={iconClass} />
+                            ) : (
+                              <Rocket size={16} className={iconClass} />
+                            )}
                             {timeStr}
                           </div>
                           <div className="flex flex-col min-w-0 flex-1">
-                            <span className={`font-semibold text-base truncate ${isPast ? 'text-muted-foreground' : 'text-foreground'}`}>
+                            <span className={`font-semibold text-base truncate ${titleClass}`}>
                               {event.title}
                             </span>
                           </div>
                           <div className="text-sm text-muted-foreground md:text-right shrink-0">
-                            {event.location}
+                            {event.meta}
                           </div>
                         </div>
                       );
