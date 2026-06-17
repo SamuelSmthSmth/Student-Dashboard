@@ -17,7 +17,9 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
+import { getVaultHandle, readJsonFile, writeJsonFile } from '@/lib/fs-helper';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { CalendarWidget } from '@/components/calendar-widget';
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -43,6 +45,8 @@ export default function InternshipsPage() {
   const [sortOrder, setSortOrder] = useState("asc");
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [vaultHandle, setVaultHandle] = useState<any>(null);
+  const [needsVault, setNeedsVault] = useState(false);
   
   // Creation Modal State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -56,36 +60,47 @@ export default function InternshipsPage() {
     length: ""
   });
 
-  // Load from API on mount
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const res = await fetch('/api/internships');
-        const json = await res.json();
-        setJobs(json.data || []);
-      } catch (err) {
-        console.error("Failed to load internships", err);
-      } finally {
+  const loadData = async (handle?: any) => {
+    setIsLoading(true);
+    try {
+      const vHandle = handle || await getVaultHandle(false);
+      if (!vHandle) {
+        setNeedsVault(true);
         setIsLoading(false);
+        return;
       }
+      setVaultHandle(vHandle);
+      setNeedsVault(false);
+      
+      const jobsData = await readJsonFile(vHandle, 'internships.json', []);
+      setJobs(jobsData);
+    } catch (err) {
+      console.error("Failed to load internships", err);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
   }, []);
+
+  const handleSelectVault = async () => {
+    const handle = await getVaultHandle(true);
+    if (handle) {
+      loadData(handle);
+    }
+  };
 
   const handleUpdateJob = (id: string, field: string, value: string) => {
     setJobs(prev => prev.map(job => job.id === id ? { ...job, [field]: value } : job));
   };
 
   const handleSave = async (id: string) => {
+    if (!vaultHandle) return;
     setSavingId(id);
     try {
-      const res = await fetch('/api/internships', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(jobs)
-      });
-      if (!res.ok) throw new Error('Save failed');
-      
+      await writeJsonFile(vaultHandle, 'internships.json', jobs);
       // Small artificial delay so the user clearly sees the "Saving..." state
       await new Promise(resolve => setTimeout(resolve, 500));
     } catch (err) {
@@ -97,18 +112,13 @@ export default function InternshipsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this application?")) return;
+    if (!vaultHandle || !window.confirm("Are you sure you want to delete this application?")) return;
     
     const updatedJobs = jobs.filter(job => job.id !== id);
     setJobs(updatedJobs);
     
     try {
-      const res = await fetch('/api/internships', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedJobs)
-      });
-      if (!res.ok) throw new Error('Delete failed');
+      await writeJsonFile(vaultHandle, 'internships.json', updatedJobs);
     } catch (err) {
       console.error(err);
       alert("Failed to delete application.");
@@ -140,12 +150,7 @@ export default function InternshipsPage() {
     setJobs(updatedJobs);
     
     try {
-      const res = await fetch('/api/internships', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedJobs)
-      });
-      if (!res.ok) throw new Error('Create failed');
+      await writeJsonFile(vaultHandle, 'internships.json', updatedJobs);
       
       setIsCreateOpen(false);
       setNewJob({ company: "", program: "", status: "Queued", closingDate: "", startDate: "", length: "" });
@@ -173,7 +178,24 @@ export default function InternshipsPage() {
   });
 
   return (
-    <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
+    <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden relative">
+      {needsVault && (
+        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6">
+           <div className="bg-card border border-border rounded-xl p-8 max-w-md w-full shadow-lg text-center flex flex-col items-center gap-6">
+             <div className="bg-primary/10 p-4 rounded-full">
+               <FolderOpen size={48} className="text-primary" />
+             </div>
+             <div>
+               <h2 className="text-2xl font-bold tracking-tight mb-2">Connect Your Vault</h2>
+               <p className="text-muted-foreground text-sm">To enable the local-first architecture, please select your Obsidian Academics folder.</p>
+             </div>
+             <Button onClick={handleSelectVault} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-md">
+               Select Obsidian Academics Vault
+             </Button>
+           </div>
+        </div>
+      )}
+      
       {/* SIDEBAR */}
       <aside className="w-[320px] flex flex-col bg-background border-r border-border z-10 shrink-0">
         <div className="h-32 relative border-b border-border flex flex-col items-start justify-center p-6 overflow-hidden">
@@ -188,8 +210,12 @@ export default function InternshipsPage() {
           <Link href="/internships">
             <NavItem icon={<Briefcase size={18} />} label="Internship & Job Hub" active />
           </Link>
+          <Link href="/calendar">
+            <NavItem icon={<Calendar size={18} />} label="University Calendar" />
+          </Link>
         </nav>
-        </aside>
+        <CalendarWidget />
+      </aside>
 
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-y-auto">

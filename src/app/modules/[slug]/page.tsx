@@ -2,30 +2,21 @@
 
 import React, { useEffect, useState, use } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
-
 import Link from 'next/link';
-import { ArrowLeft, Pin, FileText, ChevronDown, ChevronRight, ChevronLeft, Sidebar, Code, Plus, Send, Edit2, Check, Trash2, FolderPlus, X } from 'lucide-react';
+import { ArrowLeft, Pin, FileText, ChevronDown, ChevronRight, ChevronLeft, Sidebar, Code, Plus, Send, Edit2, Check, Trash2, FolderPlus, X, FolderOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-
-interface ModuleData {
-  name: string;
-  resources: {
-    lectureNotes: string[];
-    problemSheets: string[];
-    pastPapers: string[];
-    textbooks: string[];
-  };
-}
+import { getVaultHandle, readTextFile, writeTextFile, deleteFile, getPdfUrl, scanModules, getVaultCategories, ModuleData } from '@/lib/fs-helper';
+import { CodexExportButton } from '@/components/CodexExport';
+import { Button } from '@/components/ui/button';
 
 interface VaultCategory {
   name: string;
   items: string[];
 }
 
-// Sub-component for individual Math Vault categories
-function MathVaultCategory({ moduleName, category, onDeleteCategory, onRenameCategory }: { moduleName: string, category: VaultCategory, onDeleteCategory: (name: string) => void, onRenameCategory: (old: string, newN: string) => Promise<void> }) {
+function MathVaultCategory({ category, onDeleteCategory, onRenameCategory, onUpdateItems }: { category: VaultCategory, onDeleteCategory: (name: string) => void, onRenameCategory: (old: string, newN: string) => Promise<void>, onUpdateItems: (name: string, items: string[]) => Promise<void> }) {
   const [isOpen, setIsOpen] = useState(false);
   const [items, setItems] = useState<string[]>(category.items);
   const [isAdding, setIsAdding] = useState(false);
@@ -37,7 +28,6 @@ function MathVaultCategory({ moduleName, category, onDeleteCategory, onRenameCat
   const [editingBlockIdx, setEditingBlockIdx] = useState<number | null>(null);
   const [editBlockContent, setEditBlockContent] = useState('');
 
-  // Sync state if category changes from parent
   useEffect(() => {
     setItems(category.items);
     setEditNameValue(category.name);
@@ -47,11 +37,7 @@ function MathVaultCategory({ moduleName, category, onDeleteCategory, onRenameCat
     if (!newContent.trim()) return;
     try {
       const updatedItems = [...items, newContent];
-      await fetch('/api/vault', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moduleName, categoryName: category.name, items: updatedItems })
-      });
+      await onUpdateItems(category.name, updatedItems);
       setItems(updatedItems);
       setNewContent('');
       setIsAdding(false);
@@ -65,11 +51,7 @@ function MathVaultCategory({ moduleName, category, onDeleteCategory, onRenameCat
     try {
       const updatedItems = [...items];
       updatedItems[index] = editBlockContent;
-      await fetch('/api/vault', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moduleName, categoryName: category.name, items: updatedItems })
-      });
+      await onUpdateItems(category.name, updatedItems);
       setItems(updatedItems);
       setEditingBlockIdx(null);
     } catch (err) {
@@ -81,11 +63,7 @@ function MathVaultCategory({ moduleName, category, onDeleteCategory, onRenameCat
     if (!confirm('Delete this math block permanently?')) return;
     const updatedItems = items.filter((_, i) => i !== index);
     try {
-      await fetch('/api/vault', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moduleName, categoryName: category.name, items: updatedItems })
-      });
+      await onUpdateItems(category.name, updatedItems);
       setItems(updatedItems);
     } catch (err) {
       console.error(err);
@@ -235,6 +213,8 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
 
   const [moduleData, setModuleData] = useState<ModuleData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [vaultHandle, setVaultHandle] = useState<any>(null);
+  const [needsVault, setNeedsVault] = useState(false);
   
   // File streaming states
   const [activeFileName, setActiveFileName] = useState<string | null>(null);
@@ -253,7 +233,6 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
 
-  // Accordion state for left panel resources
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     lectureNotes: true,
     problemSheets: true,
@@ -265,93 +244,106 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  const fetchVault = async (modName: string) => {
+  const fetchVault = async (vHandle: FileSystemDirectoryHandle, modName: string) => {
     try {
-      const res = await fetch(`/api/vault?module=${encodeURIComponent(modName)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setVaultCategories(data.categories || []);
-      }
+      const categories = await getVaultCategories(vHandle, modName);
+      setVaultCategories(categories);
     } catch (e) {
       console.error("Failed to load vault", e);
     }
   };
 
-  useEffect(() => {
-    async function fetchModule() {
-      try {
-        const res = await fetch('/api/modules');
-        const json = await res.json();
-        const modules: ModuleData[] = json.data || [];
-        
-        const decodedName = decodeURIComponent(slug);
-        const found = modules.find(m => m.name === decodedName);
-        if (found) {
-          setModuleData(found);
-          fetchVault(found.name);
-
-          // Fetch Pinboard
-          try {
-            const pinRes = await fetch(`/api/files?module=${encodeURIComponent(found.name)}&category=&file=Pinboard.md`);
-            if (pinRes.ok) {
-              const pinJson = await pinRes.json();
-              // Strip Obsidian YAML Frontmatter
-              const cleanText = pinJson.content.replace(/^---\n[\s\S]*?\n---\n/, '');
-              setPinboardContent(cleanText);
-              setEditPinboardText(cleanText);
-            } else {
-              setPinboardContent("No Pinboard.md found in the root of this module. Create one in Obsidian to see notes here.");
-              setEditPinboardText("");
-            }
-          } catch (pinErr) {
-            setPinboardContent("Error loading Pinboard.");
-          }
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
+  const loadData = async (handle?: any) => {
+    setIsLoading(true);
+    try {
+      const vHandle = handle || await getVaultHandle(false);
+      if (!vHandle) {
+        setNeedsVault(true);
         setIsLoading(false);
+        return;
       }
+      setVaultHandle(vHandle);
+      setNeedsVault(false);
+      
+      const modules = await scanModules(vHandle);
+      const decodedName = decodeURIComponent(slug);
+      const found = modules.find(m => m.name === decodedName);
+      
+      if (found) {
+        setModuleData(found);
+        await fetchVault(vHandle, found.name);
+
+        // Fetch Pinboard
+        try {
+          const modulesDir = await vHandle.getDirectoryHandle('Modules');
+          const moduleDir = await modulesDir.getDirectoryHandle(found.name);
+          const pinText = await readTextFile(moduleDir, 'Pinboard.md');
+          if (pinText) {
+            const cleanText = pinText.replace(/^---\n[\s\S]*?\n---\n/, '');
+            setPinboardContent(cleanText);
+            setEditPinboardText(cleanText);
+          } else {
+            setPinboardContent("No Pinboard.md found in the root of this module. Create one in Obsidian to see notes here.");
+            setEditPinboardText("");
+          }
+        } catch (pinErr) {
+          setPinboardContent("Error loading Pinboard.");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
     }
-    fetchModule();
+  };
+
+  useEffect(() => {
+    loadData();
   }, [slug]);
+
+  const handleSelectVault = async () => {
+    const handle = await getVaultHandle(true);
+    if (handle) {
+      loadData(handle);
+    }
+  };
 
   if (isLoading) {
     return <div className="flex h-screen items-center justify-center bg-background text-foreground">Loading workspace...</div>;
   }
 
-  if (!moduleData) {
-    return (
-      <div className="flex flex-col h-screen items-center justify-center bg-background text-foreground">
-        <h1 className="text-3xl font-black mb-4">Module not found</h1>
-        <Link href="/" className="text-primary dark:text-blue-500 hover:text-primary dark:text-blue-400 flex items-center gap-2 transition-colors">
-          <ArrowLeft size={16} /> Back to Dashboard
-        </Link>
-      </div>
-    );
-  }
-
   // --- Handlers ---
   
-  const handleFileClick = (fileName: string, categoryFolder: string) => {
-    if (!moduleData) return;
+  const handleFileClick = async (fileName: string, categoryFolder: string) => {
+    if (!moduleData || !vaultHandle) return;
     setActiveFileName(fileName);
-    const url = `/api/files?module=${encodeURIComponent(moduleData.name)}&category=${encodeURIComponent(categoryFolder)}&file=${encodeURIComponent(fileName)}`;
-    setActiveFileUrl(url);
+    
+    try {
+      const modulesDir = await vaultHandle.getDirectoryHandle('Modules');
+      const moduleDir = await modulesDir.getDirectoryHandle(moduleData.name);
+      let targetDir = moduleDir;
+      if (categoryFolder) {
+        targetDir = await moduleDir.getDirectoryHandle(categoryFolder);
+      }
+      
+      if (fileName.toLowerCase().endsWith('.pdf')) {
+        const url = await getPdfUrl(targetDir, fileName);
+        setActiveFileUrl(url);
+      } else {
+        // Can read text files and render them here if needed
+        setActiveFileUrl(null);
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleSavePinboard = async () => {
+    if (!vaultHandle || !moduleData) return;
     try {
-      await fetch('/api/files', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          moduleName: moduleData.name,
-          category: '',
-          fileName: 'Pinboard.md',
-          content: editPinboardText
-        })
-      });
+      const modulesDir = await vaultHandle.getDirectoryHandle('Modules');
+      const moduleDir = await modulesDir.getDirectoryHandle(moduleData.name);
+      await writeTextFile(moduleDir, 'Pinboard.md', editPinboardText);
       setPinboardContent(editPinboardText);
       setIsEditingPinboard(false);
     } catch (e) {
@@ -360,49 +352,61 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
   };
 
   const handleCreateCategory = async () => {
-    if (!newCategoryName.trim()) return;
+    if (!newCategoryName.trim() || !vaultHandle || !moduleData) return;
     try {
-      await fetch('/api/vault', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moduleName: moduleData.name, categoryName: newCategoryName })
-      });
+      const modulesDir = await vaultHandle.getDirectoryHandle('Modules');
+      const moduleDir = await modulesDir.getDirectoryHandle(moduleData.name);
+      await writeTextFile(moduleDir, `${newCategoryName}.md`, '');
       setNewCategoryName('');
       setIsAddingCategory(false);
-      fetchVault(moduleData.name);
+      await fetchVault(vaultHandle, moduleData.name);
     } catch (e) {
       console.error(e);
     }
   };
 
   const handleDeleteCategory = async (categoryName: string) => {
-    if (!confirm(`Are you sure you want to delete ${categoryName}.md? This will permanently delete the file and all its contents.`)) return;
+    if (!vaultHandle || !moduleData || !confirm(`Are you sure you want to delete ${categoryName}.md?`)) return;
     try {
-      await fetch(`/api/vault?module=${encodeURIComponent(moduleData.name)}&category=${encodeURIComponent(categoryName)}`, {
-        method: 'DELETE'
-      });
-      fetchVault(moduleData.name);
+      const modulesDir = await vaultHandle.getDirectoryHandle('Modules');
+      const moduleDir = await modulesDir.getDirectoryHandle(moduleData.name);
+      await deleteFile(moduleDir, `${categoryName}.md`);
+      await fetchVault(vaultHandle, moduleData.name);
     } catch (e) {
       console.error(e);
     }
   };
 
-
   const handleRenameCategory = async (oldName: string, newName: string) => {
-    if (!newName.trim() || oldName === newName) return;
+    if (!newName.trim() || oldName === newName || !vaultHandle || !moduleData) return;
     try {
-      await fetch('/api/vault', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moduleName: moduleData!.name, oldCategoryName: oldName, newCategoryName: newName })
-      });
-      fetchVault(moduleData!.name);
+      const modulesDir = await vaultHandle.getDirectoryHandle('Modules');
+      const moduleDir = await modulesDir.getDirectoryHandle(moduleData.name);
+      
+      const content = await readTextFile(moduleDir, `${oldName}.md`);
+      await writeTextFile(moduleDir, `${newName}.md`, content);
+      await deleteFile(moduleDir, `${oldName}.md`);
+      
+      await fetchVault(vaultHandle, moduleData.name);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleUpdateCategoryItems = async (categoryName: string, items: string[]) => {
+    if (!vaultHandle || !moduleData) return;
+    try {
+      const modulesDir = await vaultHandle.getDirectoryHandle('Modules');
+      const moduleDir = await modulesDir.getDirectoryHandle(moduleData.name);
+      await writeTextFile(moduleDir, `${categoryName}.md`, items.join('\n\n---\n\n'));
+    } catch (e) {
+      console.error(e);
+      throw e;
     }
   };
 
   const renderResourceList = (title: string, key: keyof ModuleData['resources'], folderName: string) => {
+    if (!moduleData) return null;
     const files = moduleData.resources[key];
     if (!files || files.length === 0) return null;
     const isExpanded = expandedSections[key];
@@ -438,6 +442,38 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
     );
   };
 
+  if (needsVault) {
+    return (
+      <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden relative">
+        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6">
+           <div className="bg-card border border-border rounded-xl p-8 max-w-md w-full shadow-lg text-center flex flex-col items-center gap-6">
+             <div className="bg-primary/10 p-4 rounded-full">
+               <FolderOpen size={48} className="text-primary" />
+             </div>
+             <div>
+               <h2 className="text-2xl font-bold tracking-tight mb-2">Connect Your Vault</h2>
+               <p className="text-muted-foreground text-sm">To enable the local-first architecture, please select your Obsidian Academics folder.</p>
+             </div>
+             <Button onClick={handleSelectVault} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-md">
+               Select Obsidian Academics Vault
+             </Button>
+           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!moduleData) {
+    return (
+      <div className="flex flex-col h-screen items-center justify-center bg-background text-foreground">
+        <h1 className="text-3xl font-black mb-4">Module not found</h1>
+        <Link href="/" className="text-primary dark:text-blue-500 hover:text-primary dark:text-blue-400 flex items-center gap-2 transition-colors">
+          <ArrowLeft size={16} /> Back to Dashboard
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-background font-sans relative">
       
@@ -449,9 +485,12 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
       >
         <div className="min-w-[450px] h-full flex flex-col overflow-hidden">
           <div className="p-8 pb-2 shrink-0">
-            <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground/90 transition-colors mb-8 font-medium">
-              <ArrowLeft size={14} /> Back to Dashboard
-            </Link>
+            <div className="flex items-center justify-between mb-8">
+              <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground/90 transition-colors font-medium">
+                <ArrowLeft size={14} /> Back to Dashboard
+              </Link>
+              <ThemeToggle />
+            </div>
             <div className="relative mb-2">
               <h1 className="text-5xl lg:text-6xl font-black text-foreground tracking-tighter leading-none">{moduleData.name}</h1>
             </div>
@@ -496,12 +535,18 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
             </div>
 
             {/* SYLLABUS FILES */}
-            <div>
+            <div className="mb-8">
               {renderResourceList('Lecture Notes', 'lectureNotes', 'Lecture Notes')}
               {renderResourceList('Problem Sheets', 'problemSheets', 'Problem Sheets')}
               {renderResourceList('Past Papers', 'pastPapers', 'Past Papers')}
               {renderResourceList('Textbooks', 'textbooks', 'Textbooks')}
             </div>
+            
+            {/* EXPORT CODEX SECTION */}
+            <div className="mt-auto pt-6 border-t border-border flex justify-center">
+               <CodexExportButton moduleName={moduleData.name} categories={vaultCategories} />
+            </div>
+
           </div>
         </div>
       </div>
@@ -563,7 +608,7 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
           <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             
             {vaultCategories.map(cat => (
-              <MathVaultCategory key={cat.name} moduleName={moduleData.name} category={cat} onDeleteCategory={handleDeleteCategory} onRenameCategory={handleRenameCategory} />
+              <MathVaultCategory key={cat.name} category={cat} onDeleteCategory={handleDeleteCategory} onRenameCategory={handleRenameCategory} onUpdateItems={handleUpdateCategoryItems} />
             ))}
 
             {/* Add Category Section */}

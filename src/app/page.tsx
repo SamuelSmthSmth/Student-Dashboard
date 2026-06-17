@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
-  BookOpen, Briefcase, Plus, Check, X, Book, MoreVertical, Trash2, Edit2 
+  BookOpen, Briefcase, Plus, Check, X, Book, MoreVertical, Trash2, Edit2, Calendar, FolderOpen 
 } from 'lucide-react';
+import { CalendarWidget } from '@/components/calendar-widget';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,26 +17,20 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-
-interface ModuleData {
-  name: string;
-  resources: {
-    lectureNotes: string[];
-    problemSheets: string[];
-    pastPapers: string[];
-    textbooks: string[];
-  };
-}
+import { getVaultHandle, scanModules, readJsonFile, writeJsonFile, ModuleData } from '@/lib/fs-helper';
 
 interface DashboardConfig {
   categories: Record<string, string[]>;
   defaultCategory: string;
+  calendarUrl?: string;
 }
 
 export default function DashboardTemplate() {
   const [modules, setModules] = useState<ModuleData[]>([]);
   const [config, setConfig] = useState<DashboardConfig>({ categories: {}, defaultCategory: 'Uncategorized' });
   const [isLoading, setIsLoading] = useState(true);
+  const [needsVault, setNeedsVault] = useState(false);
+  const [vaultHandle, setVaultHandle] = useState<any>(null);
 
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -43,18 +38,24 @@ export default function DashboardTemplate() {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [editCategoryName, setEditCategoryName] = useState("");
 
-  const loadData = async () => {
+  const loadData = async (handle?: any) => {
+    setIsLoading(true);
     try {
-      const [modulesRes, configRes] = await Promise.all([
-        fetch('/api/modules'),
-        fetch('/api/dashboard')
-      ]);
-      if (modulesRes.ok && configRes.ok) {
-        const modulesJson = await modulesRes.json();
-        const configJson = await configRes.json();
-        setModules(modulesJson.data || []);
-        setConfig(configJson);
+      const vHandle = handle || await getVaultHandle(false);
+      if (!vHandle) {
+        setNeedsVault(true);
+        setIsLoading(false);
+        return;
       }
+      setVaultHandle(vHandle);
+      setNeedsVault(false);
+      
+      const [modulesData, configData] = await Promise.all([
+        scanModules(vHandle),
+        readJsonFile(vHandle, 'dashboard.json', { categories: {}, defaultCategory: 'Uncategorized' })
+      ]);
+      setModules(modulesData);
+      setConfig(configData);
     } catch (err) {
       console.error("Failed to load dashboard data", err);
     } finally {
@@ -66,13 +67,17 @@ export default function DashboardTemplate() {
     loadData();
   }, []);
 
+  const handleSelectVault = async () => {
+    const handle = await getVaultHandle(true);
+    if (handle) {
+      loadData(handle);
+    }
+  };
+
   const saveConfig = async (newConfig: DashboardConfig) => {
+    if (!vaultHandle) return;
     try {
-      await fetch('/api/dashboard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newConfig)
-      });
+      await writeJsonFile(vaultHandle, 'dashboard.json', newConfig);
     } catch (e) {
       console.error("Failed to save config", e);
     }
@@ -216,8 +221,25 @@ export default function DashboardTemplate() {
   const allCategoriesList = [...categoryKeys, 'Uncategorized'];
 
   return (
-    <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
+    <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden relative">
       
+      {needsVault && (
+        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6">
+           <div className="bg-card border border-border rounded-xl p-8 max-w-md w-full shadow-lg text-center flex flex-col items-center gap-6">
+             <div className="bg-primary/10 p-4 rounded-full">
+               <FolderOpen size={48} className="text-primary" />
+             </div>
+             <div>
+               <h2 className="text-2xl font-bold tracking-tight mb-2">Connect Your Vault</h2>
+               <p className="text-muted-foreground text-sm">To enable the local-first architecture, please select your Obsidian Academics folder.</p>
+             </div>
+             <Button onClick={handleSelectVault} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-md">
+               Select Obsidian Academics Vault
+             </Button>
+           </div>
+        </div>
+      )}
+
       {/* SIDEBAR */}
       <aside className="w-[320px] flex flex-col bg-background border-r border-border z-10 shrink-0">
         <div className="h-32 relative border-b border-border flex flex-col items-start justify-center p-6 overflow-hidden">
@@ -233,7 +255,11 @@ export default function DashboardTemplate() {
           <Link href="/internships">
             <NavItem icon={<Briefcase size={18} />} label="Internship & Job Hub" />
           </Link>
+          <Link href="/calendar">
+            <NavItem icon={<Calendar size={18} />} label="University Calendar" />
+          </Link>
         </nav>
+        <CalendarWidget />
       </aside>
 
       {/* MAIN CONTENT */}
