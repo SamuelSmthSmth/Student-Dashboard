@@ -61,3 +61,80 @@ export async function GET(request: Request) {
     return new NextResponse('Internal server error', { status: 500 });
   }
 }
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { moduleName, category, fileName, content } = body;
+
+    if (!moduleName || !fileName || !content) {
+      return new NextResponse('Missing required parameters', { status: 400 });
+    }
+
+    const dirPath = path.join(
+      os.homedir(), 
+      'Documents', 
+      'Obsidian', 
+      'Academics', 
+      'Modules', 
+      moduleName, 
+      category || ''
+    );
+    
+    // Ensure directory exists
+    await fs.promises.mkdir(dirPath, { recursive: true });
+
+    const filePath = path.join(dirPath, fileName);
+    
+    // Format the append block cleanly
+    let appendContent = `\n\n---\n\n${content}`;
+    
+    // Check if file exists to avoid leading separators on brand new files
+    try {
+      const stat = await fs.promises.stat(filePath);
+      if (stat.size === 0) appendContent = content; // If it's an empty file, just put the content
+    } catch (e: any) {
+      if (e.code === 'ENOENT') {
+         appendContent = content; // Brand new file
+      }
+    }
+
+    await fs.promises.appendFile(filePath, appendContent, 'utf-8');
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('File append error:', error);
+    return new NextResponse('Internal server error', { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { moduleName, category, fileName, content } = body;
+
+    if (!moduleName || !fileName) {
+      return new NextResponse('Missing required parameters', { status: 400 });
+    }
+
+    const dirPath = path.join(
+      os.homedir(), 
+      'Documents', 
+      'Obsidian', 
+      'Academics', 
+      'Modules', 
+      moduleName, 
+      category || ''
+    );
+    
+    await fs.promises.mkdir(dirPath, { recursive: true });
+    const filePath = path.join(dirPath, fileName);
+    
+    await fs.promises.writeFile(filePath, content || '', 'utf-8');
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('File PUT error:', error);
+    return new NextResponse('Internal server error', { status: 500 });
+  }
+}

@@ -2,7 +2,10 @@
 
 import React, { useEffect, useState, use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Pin, FileText, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Pin, FileText, ChevronDown, ChevronRight, ChevronLeft, Sidebar, Code, Plus, Send, Edit2, Check, Trash2, FolderPlus, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 interface ModuleData {
   name: string;
@@ -14,6 +17,133 @@ interface ModuleData {
   };
 }
 
+interface VaultCategory {
+  name: string;
+  items: string[];
+}
+
+// Sub-component for individual Math Vault categories
+function MathVaultCategory({ moduleName, category, onDeleteCategory }: { moduleName: string, category: VaultCategory, onDeleteCategory: (name: string) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [items, setItems] = useState<string[]>(category.items);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newContent, setNewContent] = useState('');
+
+  const handleSaveItem = async () => {
+    if (!newContent.trim()) return;
+    try {
+      const updatedItems = [...items, newContent];
+      await fetch('/api/vault', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ moduleName, categoryName: category.name, items: updatedItems })
+      });
+      setItems(updatedItems);
+      setNewContent('');
+      setIsAdding(false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteItem = async (index: number) => {
+    if (!confirm('Delete this math block permanently?')) return;
+    const updatedItems = items.filter((_, i) => i !== index);
+    try {
+      await fetch('/api/vault', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ moduleName, categoryName: category.name, items: updatedItems })
+      });
+      setItems(updatedItems);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <div className="bg-[#161B26] border border-slate-800/60 rounded-xl mb-4 overflow-hidden shadow-sm transition-all">
+      <div className="w-full flex items-center justify-between hover:bg-[#1c2331] transition-colors">
+        <button 
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex-1 flex items-center justify-between p-5 text-left"
+        >
+          <h3 className="text-xl font-bold text-slate-200 tracking-tight">{category.name} <span className="text-xs text-slate-600 font-mono ml-2">({items.length})</span></h3>
+          {isOpen ? <ChevronDown size={20} className="text-blue-500"/> : <ChevronRight size={20} className="text-slate-500"/>}
+        </button>
+        <button 
+          onClick={(e) => { e.stopPropagation(); onDeleteCategory(category.name); }}
+          className="p-5 text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          title="Delete Category"
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
+
+      {isOpen && (
+        <div className="p-5 border-t border-slate-800/60 bg-[#0D1117]/60">
+          {items.length === 0 ? (
+            <p className="text-sm text-slate-500 italic mb-4">No entries found. Add your first block!</p>
+          ) : (
+            <div className="flex flex-col gap-4 mb-6">
+              {items.map((block, idx) => (
+                <div key={idx} className="p-5 bg-[#11151E] rounded-xl border border-slate-800/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] relative group">
+                  <button 
+                    onClick={() => handleDeleteItem(idx)}
+                    className="absolute top-3 right-3 p-1.5 rounded-md text-slate-600 hover:text-red-400 hover:bg-slate-800 opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  <div className="prose prose-invert prose-slate prose-sm max-w-none text-slate-300">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                      {block}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!isAdding ? (
+            <button 
+              onClick={() => setIsAdding(true)}
+              className="flex items-center gap-2 text-sm font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded-lg px-3 py-2 transition-colors"
+            >
+              <Plus size={16} /> Add Entry
+            </button>
+          ) : (
+            <div className="bg-[#11151E] p-5 rounded-xl border border-blue-500/40 shadow-[0_0_20px_-3px_rgba(59,130,246,0.15)] relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+              <label className="block text-xs font-semibold text-blue-400 mb-3 uppercase tracking-wider">Markdown & LaTeX Input</label>
+              <textarea 
+                value={newContent}
+                onChange={e => setNewContent(e.target.value)}
+                className="w-full bg-[#0D1117] border border-slate-700/60 rounded-lg p-4 text-slate-200 text-sm font-mono leading-relaxed min-h-[160px] focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 mb-4 transition-all"
+                placeholder="e.g. Let $V$ be a vector space over field $F$..."
+              />
+              <div className="flex justify-end gap-3">
+                <button 
+                  onClick={() => setIsAdding(false)}
+                  className="text-sm font-medium text-slate-400 hover:text-slate-200 px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSaveItem}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2 rounded-lg flex items-center gap-2 transition-all shadow-[0_0_10px_rgba(37,99,235,0.4)]"
+                >
+                  <Send size={14} /> Save Block
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 export default function ModuleSplitView({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
   const slug = resolvedParams.slug;
@@ -24,9 +154,21 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
   // File streaming states
   const [activeFileName, setActiveFileName] = useState<string | null>(null);
   const [activeFileUrl, setActiveFileUrl] = useState<string | null>(null);
-  const [pinboardContent, setPinboardContent] = useState<string>("Loading pinboard...");
+  
+  // 3-Panel Layout State
+  const [activeSide, setActiveSide] = useState<'nav' | 'vault'>('nav');
 
-  // Accordion state
+  // Pinboard States
+  const [pinboardContent, setPinboardContent] = useState<string>("Loading pinboard...");
+  const [isEditingPinboard, setIsEditingPinboard] = useState(false);
+  const [editPinboardText, setEditPinboardText] = useState("");
+
+  // Vault States
+  const [vaultCategories, setVaultCategories] = useState<VaultCategory[]>([]);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+
+  // Accordion state for left panel resources
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     lectureNotes: true,
     problemSheets: true,
@@ -38,6 +180,18 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
+  const fetchVault = async (modName: string) => {
+    try {
+      const res = await fetch(`/api/vault?module=${encodeURIComponent(modName)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setVaultCategories(data.categories || []);
+      }
+    } catch (e) {
+      console.error("Failed to load vault", e);
+    }
+  };
+
   useEffect(() => {
     async function fetchModule() {
       try {
@@ -45,20 +199,24 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
         const json = await res.json();
         const modules: ModuleData[] = json.data || [];
         
-        // Find the matching module exactly by decoded name
         const decodedName = decodeURIComponent(slug);
         const found = modules.find(m => m.name === decodedName);
         if (found) {
           setModuleData(found);
+          fetchVault(found.name);
 
-          // Fetch Pinboard text via the new file API
+          // Fetch Pinboard
           try {
             const pinRes = await fetch(`/api/files?module=${encodeURIComponent(found.name)}&category=&file=Pinboard.md`);
             if (pinRes.ok) {
               const pinJson = await pinRes.json();
-              setPinboardContent(pinJson.content);
+              // Strip Obsidian YAML Frontmatter
+              const cleanText = pinJson.content.replace(/^---\n[\s\S]*?\n---\n/, '');
+              setPinboardContent(cleanText);
+              setEditPinboardText(cleanText);
             } else {
               setPinboardContent("No Pinboard.md found in the root of this module. Create one in Obsidian to see notes here.");
+              setEditPinboardText("");
             }
           } catch (pinErr) {
             setPinboardContent("Error loading Pinboard.");
@@ -80,21 +238,70 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
   if (!moduleData) {
     return (
       <div className="flex flex-col h-screen items-center justify-center bg-[#0D1117] text-white">
-        <h1 className="text-2xl font-bold mb-4">Module not found</h1>
-        <Link href="/" className="text-blue-500 hover:underline flex items-center gap-2">
+        <h1 className="text-3xl font-black mb-4">Module not found</h1>
+        <Link href="/" className="text-blue-500 hover:text-blue-400 flex items-center gap-2 transition-colors">
           <ArrowLeft size={16} /> Back to Dashboard
         </Link>
       </div>
     );
   }
 
-  // Click handler that sets up the file streaming URL
+  // --- Handlers ---
+  
   const handleFileClick = (fileName: string, categoryFolder: string) => {
     if (!moduleData) return;
     setActiveFileName(fileName);
     const url = `/api/files?module=${encodeURIComponent(moduleData.name)}&category=${encodeURIComponent(categoryFolder)}&file=${encodeURIComponent(fileName)}`;
     setActiveFileUrl(url);
   };
+
+  const handleSavePinboard = async () => {
+    try {
+      await fetch('/api/files', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          moduleName: moduleData.name,
+          category: '',
+          fileName: 'Pinboard.md',
+          content: editPinboardText
+        })
+      });
+      setPinboardContent(editPinboardText);
+      setIsEditingPinboard(false);
+    } catch (e) {
+      console.error("Failed to save pinboard", e);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    try {
+      await fetch('/api/vault', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ moduleName: moduleData.name, categoryName: newCategoryName })
+      });
+      setNewCategoryName('');
+      setIsAddingCategory(false);
+      fetchVault(moduleData.name);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteCategory = async (categoryName: string) => {
+    if (!confirm(`Are you sure you want to delete ${categoryName}.md? This will permanently delete the file and all its contents.`)) return;
+    try {
+      await fetch(`/api/vault?module=${encodeURIComponent(moduleData.name)}&category=${encodeURIComponent(categoryName)}`, {
+        method: 'DELETE'
+      });
+      fetchVault(moduleData.name);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
 
   const renderResourceList = (title: string, key: keyof ModuleData['resources'], folderName: string) => {
     const files = moduleData.resources[key];
@@ -107,7 +314,7 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
           onClick={() => toggleSection(key)}
           className="flex items-center justify-between w-full text-left font-medium text-slate-300 hover:text-white transition-colors py-2"
         >
-          <span>{title} <span className="text-xs text-slate-500 ml-2">({files.length})</span></span>
+          <span>{title} <span className="text-xs text-slate-500 ml-2 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded">{files.length}</span></span>
           {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </button>
         {isExpanded && (
@@ -133,62 +340,162 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0D1117] font-sans">
+    <div className="flex h-screen overflow-hidden bg-[#0D1117] font-sans relative">
       
-      {/* LEFT NAVIGATION PANEL (40%) */}
-      <div className="w-[40%] flex flex-col border-r border-slate-800/60 bg-[#0D1117] z-10 shrink-0">
-        
-        {/* Header */}
-        <div className="p-6 border-b border-slate-800/60 shrink-0">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-300 transition-colors mb-6">
-            <ArrowLeft size={14} /> Back to Dashboard
-          </Link>
-          <div className="relative">
-            <h1 className="text-2xl font-bold text-white tracking-tight">{moduleData.name}</h1>
-            <div className="absolute -bottom-3 left-0 w-12 h-1 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
+      {/* 1. LEFT NAVIGATION PANEL */}
+      <div 
+        className={`${
+          activeSide === 'nav' ? 'ml-0' : '-ml-[450px]'
+        } w-[450px] flex flex-col border-r border-slate-800/60 bg-[#0D1117] shrink-0 transition-all duration-300 ease-in-out relative z-20 h-full`}
+      >
+        <div className="min-w-[450px] h-full flex flex-col overflow-hidden">
+          <div className="p-8 pb-2 shrink-0">
+            <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-300 transition-colors mb-8 font-medium">
+              <ArrowLeft size={14} /> Back to Dashboard
+            </Link>
+            <div className="relative mb-2">
+              <h1 className="text-5xl lg:text-6xl font-black text-white tracking-tighter leading-none">{moduleData.name}</h1>
+            </div>
+            <div className="w-16 h-1.5 bg-blue-600 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)] mt-6 mb-6"></div>
           </div>
-        </div>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          
-          {/* Pinboard */}
-          <div className="bg-[#161B26] border border-slate-800/60 rounded-xl p-4 mb-8">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-amber-500 font-medium text-sm">
-                <Pin size={14} /> 📌 Pinboard
+          <div className="flex-1 overflow-y-auto px-8 pb-8">
+            
+            {/* PINBOARD */}
+            <div className="bg-[#161B26] border border-slate-800/60 rounded-xl p-5 mb-8 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 text-amber-500 font-bold tracking-wide text-xs uppercase">
+                  <Pin size={14} /> Pinboard
+                </div>
+                {!isEditingPinboard ? (
+                  <button onClick={() => setIsEditingPinboard(true)} className="text-slate-500 hover:text-slate-300 transition-colors p-1 rounded hover:bg-slate-800">
+                    <Edit2 size={14} />
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <button onClick={() => setIsEditingPinboard(false)} className="text-slate-500 hover:text-slate-300 transition-colors p-1 rounded hover:bg-slate-800">
+                      <X size={14} />
+                    </button>
+                    <button onClick={handleSavePinboard} className="text-blue-400 hover:text-blue-300 transition-colors p-1 rounded hover:bg-blue-900/20">
+                      <Check size={14} />
+                    </button>
+                  </div>
+                )}
               </div>
+              
+              {!isEditingPinboard ? (
+                <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-mono bg-[#0D1117]/50 p-4 rounded-lg border border-slate-800/40 max-h-64 overflow-y-auto custom-scrollbar">
+                  {pinboardContent || "No content."}
+                </div>
+              ) : (
+                <textarea 
+                  value={editPinboardText}
+                  onChange={e => setEditPinboardText(e.target.value)}
+                  className="w-full text-sm text-slate-200 font-mono bg-[#0D1117] p-4 rounded-lg border border-blue-500/50 min-h-[160px] focus:outline-none focus:ring-1 focus:ring-blue-500/30"
+                />
+              )}
             </div>
-            {/* Raw Text View of Pinboard.md */}
-            <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-mono bg-[#0D1117]/50 p-3 rounded border border-slate-800/40 max-h-48 overflow-y-auto">
-              {pinboardContent}
-            </div>
-          </div>
 
-          {/* Resources Accordions */}
-          <div>
-            {renderResourceList('Lecture Notes', 'lectureNotes', 'Lecture Notes')}
-            {renderResourceList('Problem Sheets', 'problemSheets', 'Problem Sheets')}
-            {renderResourceList('Past Papers', 'pastPapers', 'Past Papers')}
-            {renderResourceList('Textbooks', 'textbooks', 'Textbooks')}
+            {/* SYLLABUS FILES */}
+            <div>
+              {renderResourceList('Lecture Notes', 'lectureNotes', 'Lecture Notes')}
+              {renderResourceList('Problem Sheets', 'problemSheets', 'Problem Sheets')}
+              {renderResourceList('Past Papers', 'pastPapers', 'Past Papers')}
+              {renderResourceList('Textbooks', 'textbooks', 'Textbooks')}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* RIGHT PREVIEWER PANEL (60%) */}
-      <div className="w-[60%] bg-[#11151E] flex flex-col relative h-full">
-        {activeFileUrl ? (
-          <iframe 
-            src={activeFileUrl} 
-            className="w-full h-full border-none bg-white" 
-            title={activeFileName || 'Document Viewer'} 
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center flex-col text-slate-500/80">
-            <FileText size={48} className="mb-4 opacity-20" />
-            <p className="text-base tracking-wide text-slate-400">Select a document from the left navigation panel to begin studying.</p>
-          </div>
+      {/* 2. CENTER DOCUMENT VIEWER */}
+      <div className="flex-1 bg-[#11151E] flex flex-col relative h-full min-w-0 transition-all duration-300 ease-in-out">
+        {/* Toggle Right Panel Button */}
+        {activeSide === 'nav' && (
+          <button 
+            onClick={() => setActiveSide('vault')}
+            className="absolute top-4 right-4 z-50 bg-[#161B26]/80 backdrop-blur-md border border-slate-700/60 text-amber-500 hover:text-white hover:bg-slate-800 px-4 py-2 rounded-xl transition-all shadow-lg flex items-center gap-2 font-medium text-sm"
+          >
+            <Code size={16} /> Open Math Vault <ChevronLeft size={16} className="rotate-180" />
+          </button>
         )}
+
+        {/* Viewer Content */}
+        <div className="flex-1 overflow-hidden relative">
+          {activeFileUrl ? (
+            <iframe 
+              src={activeFileUrl} 
+              className="w-full h-full border-none bg-white" 
+              title={activeFileName || 'Document Viewer'} 
+            />
+          ) : (
+            <div className="flex-1 h-full flex items-center justify-center flex-col text-slate-500/80">
+              <FileText size={64} className="mb-6 opacity-20" />
+              <p className="text-xl tracking-wide text-slate-400 font-medium">Document Viewer</p>
+              <p className="text-sm mt-2 text-slate-600">Select a file from the left navigation panel.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. RIGHT MATH VAULT PANEL */}
+      <div 
+        className={`${
+          activeSide === 'vault' ? 'mr-0' : '-mr-[450px]'
+        } w-[450px] flex flex-col border-l border-slate-800/60 bg-[#0D1117] shrink-0 transition-all duration-300 ease-in-out relative z-20 h-full`}
+      >
+        <div className="min-w-[450px] h-full flex flex-col overflow-hidden">
+          
+          <div className="p-8 pb-4 shrink-0 border-b border-slate-800/60 bg-[#0D1117]">
+            <div className="flex items-center justify-between mb-6">
+               <button 
+                onClick={() => setActiveSide('nav')}
+                className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors"
+               >
+                 <ChevronRight size={16} /> Close Vault
+               </button>
+            </div>
+            <div className="flex items-center gap-3 mb-2">
+              <Code size={28} className="text-amber-500" />
+              <h2 className="text-3xl font-black text-white tracking-tight">Math Vault</h2>
+            </div>
+            <p className="text-sm text-slate-400">Local LaTeX repository for <strong className="text-slate-200">{moduleData.name}</strong>.</p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            
+            {vaultCategories.map(cat => (
+              <MathVaultCategory key={cat.name} moduleName={moduleData.name} category={cat} onDeleteCategory={handleDeleteCategory} />
+            ))}
+
+            {/* Add Category Section */}
+            {!isAddingCategory ? (
+              <button 
+                onClick={() => setIsAddingCategory(true)}
+                className="w-full flex items-center justify-center gap-2 py-4 border-2 border-dashed border-slate-800 hover:border-slate-600 rounded-xl text-slate-500 hover:text-slate-300 transition-colors font-medium text-sm mt-4"
+              >
+                <FolderPlus size={16} /> Create New Category
+              </button>
+            ) : (
+              <div className="mt-4 p-5 rounded-xl border border-blue-500/30 bg-[#161B26]">
+                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Category Name</label>
+                <input 
+                  type="text" 
+                  value={newCategoryName}
+                  onChange={e => setNewCategoryName(e.target.value)}
+                  className="w-full bg-[#0D1117] border border-slate-700 rounded-lg p-3 text-slate-200 text-sm focus:outline-none focus:border-blue-500 mb-3"
+                  placeholder="e.g. Corollaries"
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setIsAddingCategory(false)} className="text-sm text-slate-400 hover:text-slate-200 px-3 py-1.5">Cancel</button>
+                  <button onClick={handleCreateCategory} className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors">Create</button>
+                </div>
+              </div>
+            )}
+
+          </div>
+
+        </div>
       </div>
 
     </div>
