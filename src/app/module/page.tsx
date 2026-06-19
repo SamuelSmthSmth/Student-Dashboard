@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, use } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import Link from 'next/link';
 import { ArrowLeft, Pin, FileText, ChevronDown, ChevronRight, ChevronLeft, Sidebar, Code, Plus, Send, Edit2, Check, Trash2, FolderPlus, X, FolderOpen } from 'lucide-react';
@@ -10,7 +11,9 @@ import rehypeKatex from 'rehype-katex';
 import { getVaultHandle, readTextFile, writeTextFile, deleteFile, getPdfUrl, scanModules, getVaultCategories, ModuleData } from '@/lib/fs-helper';
 import { CodexExportButton } from '@/components/CodexExport';
 import { Button } from '@/components/ui/button';
-import { PdfViewer } from '@/components/pdf-viewer';
+import dynamic from 'next/dynamic';
+
+const PdfViewer = dynamic(() => import('@/components/pdf-viewer').then(mod => mod.PdfViewer), { ssr: false });
 
 interface VaultCategory {
   name: string;
@@ -208,9 +211,9 @@ function MathVaultCategory({ category, onDeleteCategory, onRenameCategory, onUpd
 }
 
 
-export default function ModuleSplitView({ params }: { params: Promise<{ slug: string }> }) {
-  const resolvedParams = use(params);
-  const slug = resolvedParams.slug;
+function ModuleSplitViewContent() {
+  const searchParams = useSearchParams();
+  const slug = searchParams.get('name') || '';
 
   const [moduleData, setModuleData] = useState<ModuleData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -640,5 +643,13 @@ export default function ModuleSplitView({ params }: { params: Promise<{ slug: st
       </div>
 
     </div>
+  );
+}
+
+export default function ModuleSplitView() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-background text-foreground">Loading workspace...</div>}>
+      <ModuleSplitViewContent />
+    </Suspense>
   );
 }

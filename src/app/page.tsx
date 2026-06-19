@@ -420,7 +420,7 @@ function ModuleCard({ moduleData, categoriesList, currentCategory, onMove }: Mod
     
   return (
     <div className="relative group">
-      <Link href={`/modules/${encodeURIComponent(moduleData.name)}`} className="block h-full">
+      <Link href={`/module?name=${encodeURIComponent(moduleData.name)}`} className="block h-full">
         <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between transition-all duration-200 cursor-pointer hover:border-primary/45 hover:shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)] hover:bg-accent h-full pr-12">
           <div className="flex items-center gap-3 min-w-0">
             <Book size={18} className="text-muted-foreground shrink-0" />

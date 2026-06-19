@@ -1,11 +1,5 @@
-import { NextResponse } from 'next/server';
-
-const EXETER_URL = "https://mytimetable.exeter.ac.uk/ical?6a32f0a1&group=false&eu=c280NzQ=&h=MKUu-eaUcbW-QfqVwKHubxzwtfMwo1ZgbnILGGVjdZg=";
-
-export const dynamic = 'force-dynamic';
-
-function parseBasicICS(icsString: string) {
-  const events = [];
+export function parseBasicICS(icsString: string) {
+  const events: any[] = [];
   const lines = icsString.split(/\r\n|\n|\r/);
   
   // Unfold lines (lines starting with space/tab are continuations)
@@ -64,23 +58,4 @@ function parseBasicICS(icsString: string) {
     }
   }
   return events;
-}
-
-export async function GET() {
-  try {
-    const response = await fetch(EXETER_URL, { cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch calendar: ${response.statusText}`);
-    }
-    
-    const icsData = await response.text();
-    const processedEvents = parseBasicICS(icsData);
-
-    processedEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
-
-    return NextResponse.json(processedEvents);
-  } catch (error) {
-    console.error('Error in /api/calendar:', error);
-    return NextResponse.json([]);
-  }
 }

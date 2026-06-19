@@ -1,121 +1,76 @@
-import { get, set } from 'idb-keyval';
+import { BaseDirectory, readDir, readTextFile as tauriReadTextFile, writeTextFile as tauriWriteTextFile, remove, mkdir } from '@tauri-apps/plugin-fs';
+import { documentDir, join } from '@tauri-apps/api/path';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
-// Gets the saved vault handle or prompts if not found
-export async function getVaultHandle(promptIfMissing = false): Promise<FileSystemDirectoryHandle | null> {
-  let handle = await get<FileSystemDirectoryHandle>('vaultHandle');
-  if (handle) {
-    // Verify permission
-    if (await verifyPermission(handle, true)) {
-      return handle;
-    }
-  }
-  
-  if (promptIfMissing) {
-    if (!('showDirectoryPicker' in window)) {
-      alert("Your browser does not support the File System Access API. Please use a Chromium-based browser like Google Chrome or Microsoft Edge.");
-      return null;
-    }
-    try {
-      handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      await set('vaultHandle', handle);
-      return handle;
-    } catch (err) {
-      console.error("User cancelled or failed to get directory picker", err);
-      return null;
-    }
-  }
-  return null;
+const VAULT_ROOT = 'Obsidian/Academics';
+
+// Returns true if we can connect (since we use a hardcoded scope, we just return true)
+export async function getVaultHandle(promptIfMissing = false): Promise<boolean> {
+  return true;
 }
 
-async function verifyPermission(fileHandle: FileSystemHandle, readWrite: boolean) {
-  const options: FileSystemHandlePermissionDescriptor = {};
-  if (readWrite) {
-    options.mode = 'readwrite';
-  }
-  
-  if ((await fileHandle.queryPermission(options)) === 'granted') {
-    return true;
-  }
-  if ((await fileHandle.requestPermission(options)) === 'granted') {
-    return true;
-  }
-  return false;
-}
-
-export async function readJsonFile(dirHandle: FileSystemDirectoryHandle, fileName: string, defaultData: any = null) {
+export async function readJsonFile(dirPath: any, fileName: string, defaultData: any = null) {
   try {
-    const fileHandle = await dirHandle.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    const text = await file.text();
+    const text = await tauriReadTextFile(`${VAULT_ROOT}/${fileName}`, { baseDir: BaseDirectory.Document });
     return JSON.parse(text);
   } catch (err: any) {
-    if (err.name === 'NotFoundError') {
-      return defaultData;
-    }
-    throw err;
+    return defaultData;
   }
 }
 
-export async function writeJsonFile(dirHandle: FileSystemDirectoryHandle, fileName: string, data: any) {
-  const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(JSON.stringify(data, null, 2));
-  await writable.close();
+export async function writeJsonFile(dirPath: any, fileName: string, data: any) {
+  await tauriWriteTextFile(`${VAULT_ROOT}/${fileName}`, JSON.stringify(data, null, 2), { baseDir: BaseDirectory.Document });
 }
 
-export async function readTextFile(dirHandle: FileSystemDirectoryHandle, fileName: string) {
+function resolvePath(dirPath: any, fileName: string) {
+  const relativeDir = typeof dirPath === 'string' ? dirPath : '';
+  return relativeDir ? `${VAULT_ROOT}/${relativeDir}/${fileName}` : `${VAULT_ROOT}/${fileName}`;
+}
+
+export async function readTextFile(dirPath: any, fileName: string) {
   try {
-    const fileHandle = await dirHandle.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    return await file.text();
+    const path = resolvePath(dirPath, fileName);
+    return await tauriReadTextFile(path, { baseDir: BaseDirectory.Document });
   } catch (err: any) {
-    if (err.name === 'NotFoundError') {
-      return '';
-    }
-    throw err;
+    return '';
   }
 }
 
-export async function writeTextFile(dirHandle: FileSystemDirectoryHandle, fileName: string, content: string) {
-  const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(content);
-  await writable.close();
+export async function writeTextFile(dirPath: any, fileName: string, content: string) {
+  const path = resolvePath(dirPath, fileName);
+  await tauriWriteTextFile(path, content, { baseDir: BaseDirectory.Document });
 }
 
-export async function appendTextFile(dirHandle: FileSystemDirectoryHandle, fileName: string, content: string) {
+export async function appendTextFile(dirPath: any, fileName: string, content: string) {
+  const path = resolvePath(dirPath, fileName);
   try {
-    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
     let existingContent = '';
+    try {
+      existingContent = await tauriReadTextFile(path, { baseDir: BaseDirectory.Document });
+    } catch (e) {}
     
-    const file = await fileHandle.getFile();
-    if (file.size > 0) {
-      existingContent = await file.text();
-    }
-    
-    const writable = await fileHandle.createWritable();
     const newContent = existingContent ? `${existingContent}\n\n---\n\n${content}` : content;
-    await writable.write(newContent);
-    await writable.close();
+    await tauriWriteTextFile(path, newContent, { baseDir: BaseDirectory.Document });
   } catch (err) {
     console.error("Failed to append", err);
     throw err;
   }
 }
 
-export async function deleteFile(dirHandle: FileSystemDirectoryHandle, fileName: string) {
+export async function deleteFile(dirPath: any, fileName: string) {
+  const path = resolvePath(dirPath, fileName);
   try {
-    await dirHandle.removeEntry(fileName);
-  } catch (err: any) {
-    if (err.name !== 'NotFoundError') throw err;
-  }
+    await remove(path, { baseDir: BaseDirectory.Document });
+  } catch (err: any) {}
 }
 
-export async function getPdfUrl(dirHandle: FileSystemDirectoryHandle, fileName: string) {
+export async function getPdfUrl(dirPath: any, fileName: string) {
   try {
-    const fileHandle = await dirHandle.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    return URL.createObjectURL(file);
+    const docPath = await documentDir();
+    const relativeDir = typeof dirPath === 'string' ? dirPath : '';
+    const path = relativeDir ? `${VAULT_ROOT}/${relativeDir}` : VAULT_ROOT;
+    const filePath = await join(docPath, path, fileName);
+    return convertFileSrc(filePath);
   } catch (err) {
     console.error('Failed to get PDF', err);
     return null;
@@ -132,19 +87,19 @@ export interface ModuleData {
   };
 }
 
-export async function scanModules(vaultHandle: FileSystemDirectoryHandle): Promise<ModuleData[]> {
+export async function scanModules(vaultHandle: any): Promise<ModuleData[]> {
   const modulesData: ModuleData[] = [];
   try {
-    const modulesDir = await vaultHandle.getDirectoryHandle('Modules');
+    const entries = await readDir(`${VAULT_ROOT}/Modules`, { baseDir: BaseDirectory.Document });
     
-    for await (const [name, handle] of (modulesDir as any).entries()) {
-      if (handle.kind === 'directory' && !name.startsWith('.')) {
-        const moduleDir = handle as FileSystemDirectoryHandle;
+    for (const entry of entries) {
+      if (entry.isDirectory && entry.name && !entry.name.startsWith('.')) {
+        const name = entry.name;
         
-        const lectureNotes = await getFileNamesInDir(moduleDir, 'Lecture Notes');
-        const problemSheets = await getFileNamesInDir(moduleDir, 'Problem Sheets');
-        const pastPapers = await getFileNamesInDir(moduleDir, 'Past Papers');
-        const textbooks = await getFileNamesInDir(moduleDir, 'Textbooks');
+        const lectureNotes = await getFileNamesInDir(`Modules/${name}/Lecture Notes`);
+        const problemSheets = await getFileNamesInDir(`Modules/${name}/Problem Sheets`);
+        const pastPapers = await getFileNamesInDir(`Modules/${name}/Past Papers`);
+        const textbooks = await getFileNamesInDir(`Modules/${name}/Textbooks`);
 
         modulesData.push({
           name,
@@ -152,48 +107,40 @@ export async function scanModules(vaultHandle: FileSystemDirectoryHandle): Promi
         });
       }
     }
-  } catch (err: any) {
-    if (err.name !== 'NotFoundError') throw err;
-  }
+  } catch (err: any) {}
   return modulesData;
 }
 
-async function getFileNamesInDir(parent: FileSystemDirectoryHandle, dirName: string): Promise<string[]> {
+async function getFileNamesInDir(relPath: string): Promise<string[]> {
   try {
-    const dir = await parent.getDirectoryHandle(dirName);
+    const entries = await readDir(`${VAULT_ROOT}/${relPath}`, { baseDir: BaseDirectory.Document });
     const files: string[] = [];
-    for await (const [name, handle] of (dir as any).entries()) {
-      if (handle.kind === 'file' && !name.startsWith('.')) {
-        files.push(name);
+    for (const entry of entries) {
+      if (entry.isFile && entry.name && !entry.name.startsWith('.')) {
+        files.push(entry.name);
       }
     }
     return files;
   } catch (err: any) {
-    if (err.name === 'NotFoundError') return [];
-    throw err;
+    return [];
   }
 }
 
-export async function getVaultCategories(vaultHandle: FileSystemDirectoryHandle, moduleName: string) {
+export async function getVaultCategories(vaultHandle: any, moduleName: string) {
   const categories: { name: string; items: string[] }[] = [];
   try {
-    const modulesDir = await vaultHandle.getDirectoryHandle('Modules');
-    const moduleDir = await modulesDir.getDirectoryHandle(moduleName);
+    const entries = await readDir(`${VAULT_ROOT}/Modules/${moduleName}`, { baseDir: BaseDirectory.Document });
     
-    for await (const [name, handle] of (moduleDir as any).entries()) {
-      if (handle.kind === 'file' && name.endsWith('.md')) {
-        const catName = name.replace('.md', '');
+    for (const entry of entries) {
+      if (entry.isFile && entry.name && entry.name.endsWith('.md')) {
+        const catName = entry.name.replace('.md', '');
         if (catName === 'Pinboard' || catName === 'Dashboard') continue;
 
-        const fileHandle = handle as FileSystemFileHandle;
-        const file = await fileHandle.getFile();
-        const content = await file.text();
+        const content = await tauriReadTextFile(`${VAULT_ROOT}/Modules/${moduleName}/${entry.name}`, { baseDir: BaseDirectory.Document });
         const blocks = content.split(/\n\n---\n\n|\n---\n/).filter((b: string) => b.trim() !== '');
         categories.push({ name: catName, items: blocks });
       }
     }
-  } catch (err: any) {
-    if (err.name !== 'NotFoundError') throw err;
-  }
+  } catch (err: any) {}
   return categories;
 }

@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getVaultHandle, readJsonFile } from '@/lib/fs-helper';
+import { getVaultHandle, readJsonFile, writeJsonFile } from '@/lib/fs-helper';
+import { parseBasicICS } from '@/lib/calendar';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { 
   BookOpen, Briefcase, Calendar as CalendarIcon, Save, Loader2, Rocket, AlertCircle 
 } from 'lucide-react';
@@ -35,13 +37,12 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<UnifiedEvent[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
 
-  // Fetch dashboard config to prefill URL
   useEffect(() => {
     async function fetchConfig() {
       try {
-        const res = await fetch('/api/dashboard');
-        if (res.ok) {
-          const config = await res.json();
+        const handle = await getVaultHandle(false);
+        if (handle) {
+          const config = await readJsonFile(handle, 'dashboard.json', { categories: {}, defaultCategory: 'Uncategorized' });
           if (config.calendarUrl) {
             setUrl(config.calendarUrl);
           }
@@ -58,19 +59,26 @@ export default function CalendarPage() {
       const unified: UnifiedEvent[] = [];
 
       // 1. Fetch Calendar Lectures
-      const res = await fetch('/api/calendar');
-      if (res.ok) {
-        const data = await res.json();
-        data.forEach((e: any) => {
-          unified.push({
-            id: `cal-${e.id}`,
-            title: e.title,
-            date: new Date(e.start),
-            type: 'lecture',
-            meta: e.location,
-            end: new Date(e.end)
-          });
-        });
+      if (url) {
+        try {
+          const res = await tauriFetch(url, { method: 'GET' });
+          if (res.ok) {
+            const dataText = await res.text();
+            const data = parseBasicICS(dataText);
+            data.forEach((e: any) => {
+              unified.push({
+                id: `cal-${e.id}`,
+                title: e.title,
+                date: new Date(e.start),
+                type: 'lecture',
+                meta: e.location,
+                end: new Date(e.end)
+              });
+            });
+          }
+        } catch (e) {
+          console.error("Failed to fetch calendar", e);
+        }
       }
 
       // 2. Fetch Internships
@@ -117,15 +125,13 @@ export default function CalendarPage() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const resConfig = await fetch('/api/dashboard');
-      const config = await resConfig.json();
-      config.calendarUrl = url;
+      const handle = await getVaultHandle(false);
+      if (handle) {
+        const config = await readJsonFile(handle, 'dashboard.json', { categories: {}, defaultCategory: 'Uncategorized' });
+        config.calendarUrl = url;
+        await writeJsonFile(handle, 'dashboard.json', config);
+      }
       
-      await fetch('/api/dashboard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
-      });
       // reload events
       loadEvents();
     } catch (err) {}

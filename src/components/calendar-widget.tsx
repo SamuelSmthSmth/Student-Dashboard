@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 
 import { Calendar as CalendarIcon, Briefcase, Rocket, AlertCircle } from 'lucide-react';
 import { getVaultHandle, readJsonFile } from '@/lib/fs-helper';
+import { parseBasicICS } from '@/lib/calendar';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
 interface UnifiedEvent {
   id: string;
@@ -23,22 +25,30 @@ export function CalendarWidget() {
         const unified: UnifiedEvent[] = [];
         
         // 1. Fetch Calendar Lectures
-        const res = await fetch('/api/calendar');
-        if (res.ok) {
-          const calendarData = await res.json();
-          calendarData.forEach((e: any) => {
-            unified.push({
-              id: `cal-${e.id}`,
-              title: e.title,
-              date: new Date(e.start),
-              type: 'lecture',
-              meta: e.location
-            });
-          });
+        const handle = await getVaultHandle(false);
+        if (handle) {
+          const config = await readJsonFile(handle, 'dashboard.json', { categories: {}, defaultCategory: 'Uncategorized' });
+          if (config.calendarUrl) {
+            try {
+              const res = await tauriFetch(config.calendarUrl, { method: 'GET' });
+              if (res.ok) {
+                const dataText = await res.text();
+                const calendarData = parseBasicICS(dataText);
+                calendarData.forEach((e: any) => {
+                  unified.push({
+                    id: `cal-${e.id}`,
+                    title: e.title,
+                    date: new Date(e.start),
+                    type: 'lecture',
+                    meta: e.location
+                  });
+                });
+              }
+            } catch (err) {}
+          }
         }
 
         // 2. Fetch Internships
-        const handle = await getVaultHandle(false);
         if (handle) {
           const jobsData = await readJsonFile(handle, 'internships.json', []);
           jobsData.forEach((job: any) => {
